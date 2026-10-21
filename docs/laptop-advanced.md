@@ -2,6 +2,8 @@
 
 ## MuJoCo
 
+The app and simulator use the bundled Kimodo idle by default; `--idle` overrides it.
+The current bundled file fails validation and must be corrected or replaced before simulation/control.
 Test the same idle reference, library and acceptance profile before hardware.
 Both terminals run on the **LOCAL GPU laptop**.
 
@@ -10,13 +12,13 @@ Both terminals run on the **LOCAL GPU laptop**.
 cd ~/Documents/g1_zero/GR00T-WholeBodyControl
 bash install_scripts/install_mujoco_sim.sh
 source .venv_sim/bin/activate
-python ../G1-Zero-Shot/scripts/laptop/sim.py --idle ~/motions/idle
+python ../G1-Zero-Shot/scripts/laptop/sim.py
 ```
 
 ```bash
 # LOCAL — terminal 2
 cd ~/Documents/g1_zero/G1-Zero-Shot
-bash scripts/laptop/run.sh --sim --interface lo --idle ~/motions/idle --motions ~/motions
+bash scripts/laptop/run.sh --sim --interface lo --motions ~/motions
 ```
 
 In the panel, use **Suspended setup**, wait for checks, release simulator suspension

@@ -52,12 +52,14 @@ Opening the app does not actuate the robot.
 1. Optional: open **Acceptance limits**, edit the motion checks, then apply.
 2. Use **Import Kimodo** for generated G1 CSV files. Enter their source FPS
    (**30** for your six-second, 180-frame export) and choose a new output folder.
-3. Click **Load library** and select your SONIC motion folder, then its stationary
-   **idle** clip. Setup becomes available only after validation passes.
+3. The app automatically loads `artifacts/motions/kimodo/idle.csv` as the idle
+   reference (30 FPS). Click **Load library** to add your SONIC motion folder.
+   Use **Idle: default → Choose custom SONIC idle** only to override it.
 
-You need a stationary idle reference and at least one motion. Each motion must
-start and end near that idle pose. Importing does not automatically create an idle
-pose or make a generated motion deployable. [Motion format](docs/kimodo-import.md).
+Setup requires the idle to pass validation; a motion folder is optional for keyboard
+control. Each added motion must start and end near the idle pose.
+**The supplied idle currently fails clearance/stance checks, so setup stays disabled**
+until it is corrected or replaced. [Motion format](docs/kimodo-import.md).
 
 ### 3. Run: setup → motion or keyboard
 
@@ -87,10 +89,11 @@ bash scripts/laptop/import_kimodo.sh ~/Downloads/motion.csv \
 
 # LOCAL — open with an existing validated library
 bash scripts/laptop/run.sh --interface enp3s0 \
-  --idle ~/motions/idle --motions ~/motions
+  --motions ~/motions
 ```
 
-The UI and importer use the same saved **Acceptance limits**. To use a separate
+The UI and importer use the same saved **Acceptance limits**. To use a custom
+idle, add `--idle /path/to/sonic_idle`. To use a separate acceptance
 profile, add `--limits /path/to/limits.json` to either command.
 Changing limits requires reloading the library. Runtime guards remain fixed.
 [Limits and defaults](docs/laptop-advanced.md#acceptance-limits).

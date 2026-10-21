@@ -51,6 +51,7 @@ class Panel:
         self.limits=dict(getattr(session,'acceptance_limits',DEFAULTS))
         self.limits_path=getattr(session,'limits_path',DEFAULT_PATH)
         self.library_valid=getattr(session,'library_valid',True);self.limits_dialog=None
+        self.idle_override=getattr(session,'idle_override',None)
         self.keys=set();self.blocked_keys=set();self.release_jobs={};self.queue=[];self.waiting_clip=None;self.idle_requested=False
         self.import_dialog=None;self.library_busy=False
         self.activity_lines=[];self.last_activity_read=0;self.setup_started=None
@@ -109,6 +110,12 @@ class Panel:
         toolbar=ttk.Frame(clips,style='Card.TFrame');toolbar.pack(fill='x',pady=(0,14))
         self.import_button=ttk.Button(toolbar,text='+ Import Kimodo',style='Accent.TButton',command=self.open_import);self.import_button.pack(side='left')
         self.load_button=ttk.Button(toolbar,text='Load library',command=self.load_library);self.load_button.pack(side='left',padx=8)
+        self.idle_menu=ttk.Menubutton(toolbar,text='Idle: default ▾')
+        idle_options=tk.Menu(self.idle_menu,tearoff=False)
+        idle_options.add_command(label='Use bundled Kimodo idle',command=lambda:self.select_idle(None))
+        idle_options.add_command(label='Choose custom SONIC idle…',command=self.choose_idle)
+        self.idle_menu.configure(menu=idle_options);self.idle_menu.pack(side='left',padx=8)
+        if self.idle_override:self.idle_menu.configure(text='Idle: '+Path(self.idle_override).name+' ▾')
         self.library_label=tk.StringVar(value=f'{max(0,len(catalog)-1)} motions')
         ttk.Label(clips,textvariable=self.library_label,style='Caption.TLabel').pack(anchor='w',pady=(0,8))
         listing=ttk.Frame(clips,style='Card.TFrame');listing.pack(fill='both',expand=True)
@@ -193,13 +200,25 @@ class Panel:
         self.import_dialog=ImportDialog(self.root,done,self.load_library,dict(self.limits))
         self.update_buttons(self.session.status)
 
-    def load_library(self,folder=None):
+    def select_idle(self,path):
+        if not self.can_edit_library() or self.import_dialog or self.limits_dialog:return
+        self.idle_override=Path(path) if path is not None else None
+        self.session.idle_override=self.idle_override;self.library_valid=False
+        self.idle_menu.configure(text='Idle: '+(self.idle_override.name if self.idle_override else 'default')+' ▾')
+        self.load_library(default_only=True)
+
+    def choose_idle(self):
         if not self.can_edit_library() or self.import_dialog or self.limits_dialog:return
         from tkinter import filedialog
-        folder=folder or filedialog.askdirectory(parent=self.root,title='SONIC motion library')
-        if not folder:return
-        idle=filedialog.askdirectory(parent=self.root,title='Validated stationary idle clip (contains joint_pos.csv)',initialdir=folder)
-        if not idle:return
+        path=filedialog.askdirectory(parent=self.root,title='Custom SONIC idle (contains joint_pos.csv)')
+        if path:self.select_idle(path)
+
+    def load_library(self,folder=None,*,default_only=False):
+        if not self.can_edit_library() or self.import_dialog or self.limits_dialog:return
+        from tkinter import filedialog
+        if not default_only:
+            folder=folder or filedialog.askdirectory(parent=self.root,title='SONIC motion library')
+            if not folder:return
         import queue,threading
         events=queue.Queue();self.library_busy=True;self.update_buttons(self.session.status)
         self.notice.set('Checking library, endpoints and hand clearance…')
@@ -211,6 +230,9 @@ class Panel:
                 directory=Path(tempfile.mkdtemp(prefix='session-',dir=runs));directory.chmod(0o700)
                 model=(load_model(Path(__file__).resolve().parents[2]/'GR00T-WholeBodyControl') if getattr(self.session,'demo',False)
                        else json.loads((self.session.build/'guard-model.json').read_text()))
+                from .idle import resolve_idle
+                upstream=Path(__file__).resolve().parents[2]/'GR00T-WholeBodyControl'
+                idle=resolve_idle(self.idle_override,directory,upstream,self.limits)
                 catalog=stage_library(idle,folder,directory/'motions',model,self.limits)
                 events.put((catalog,directory,None))
             except Exception as e:events.put((None,None,str(e)))
@@ -305,10 +327,11 @@ class Panel:
         def enable(widget,yes):widget.configure(state='normal' if yes else 'disabled')
         editable=self.can_edit_library() and self.import_dialog is None and self.limits_dialog is None
         enable(self.limits_button,editable)
-        enable(self.import_button,editable);enable(self.load_button,editable)
+        enable(self.import_button,editable);enable(self.load_button,editable);enable(self.idle_menu,editable)
         enable(self.arm_button,editable and self.library_valid and not getattr(self.session,'offline',False))
         enable(self.start_button,bool(s and s['state']==1 and s.get('setup_ready',False) and not self.session.stopped and not self.session.pending))
-        for widget in [self.play_button,self.all_button,self.planner_button,*self.presets]:enable(widget,ready)
+        enable(self.planner_button,ready)
+        for widget in [self.play_button,self.all_button,*self.presets]:enable(widget,ready and len(self.catalog)>1)
         enable(self.clear_button,bool(self.queue));enable(self.logs_button,not getattr(self.session,'demo',False))
 
     def update_activity(self):
@@ -384,7 +407,7 @@ def main():
     p.add_argument('--library',action='store_true',help='Offline library/import workspace; cannot arm a robot')
     p.add_argument('--demo',action='store_true',help='Offline UI demo: no GPU, DDS or robot commands')
     p.add_argument('--build',type=Path,default=Path('artifacts/laptop/deploy'))
-    p.add_argument('--idle',type=Path,help='Stationary upright SONIC CSV directory')
+    p.add_argument('--idle',type=Path,help='Override bundled Kimodo idle with a stationary SONIC directory')
     p.add_argument('--motions',type=Path,help='Folder of SONIC CSV motion directories')
     p.add_argument('--interface',help='LOCAL Ethernet interface; lo for simulation')
     p.add_argument('--sim',action='store_true')
@@ -397,9 +420,12 @@ def main():
         if args.library:catalog=[dict(index=0,name='Idle reference',frames=50)]
         session=DemoSession(catalog);session.offline=args.library
         session.acceptance_limits=limits;session.limits_path=args.limits or DEFAULT_PATH
-        root=tk.Tk();Panel(root,session,catalog);root.mainloop();return
+        session.idle_override=args.idle
+        if args.library:session.library_valid=False
+        root=tk.Tk();panel=Panel(root,session,catalog)
+        if args.library:root.after(0,lambda:panel.load_library(default_only=True))
+        root.mainloop();return
     if not args.interface:p.error('--interface is required for the GPU controller')
-    if bool(args.idle)!=bool(args.motions):p.error('Supply both --idle and --motions, or choose them in the UI')
     from .motions import stage_library
     import fcntl,os
     lock=Path(f'/tmp/sonic-laptop-{os.getuid()}.lock').open('w')
@@ -407,11 +433,12 @@ def main():
     runs=Path('artifacts/laptop/sessions').resolve();runs.mkdir(parents=True,exist_ok=True)
     directory=Path(tempfile.mkdtemp(prefix='session-',dir=runs));directory.chmod(0o700)
     model=json.loads((args.build/'guard-model.json').read_text())
-    catalog=(stage_library(args.idle,args.motions,directory/'motions',model,limits) if args.idle
-             else [dict(index=0,name='Load an idle reference',frames=50)])
+    catalog=[dict(index=0,name='Default idle',frames=50)]
     session=Session(args.build,directory,args.interface,args.sim,lock.fileno())
     session.acceptance_limits=limits;session.limits_path=args.limits or DEFAULT_PATH
-    session.library_valid=bool(args.idle)
-    root=tk.Tk();Panel(root,session,catalog);root.mainloop()
+    session.library_valid=False;session.idle_override=args.idle
+    root=tk.Tk();panel=Panel(root,session,catalog)
+    root.after(0,lambda:panel.load_library(args.motions,default_only=not bool(args.motions)))
+    root.mainloop()
 
 if __name__=='__main__':main()

@@ -12,10 +12,16 @@ from gear_sonic.scripts.run_sim_loop import ArgsConfig, SimWrapper, instantiate_
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--idle',type=Path,required=True)
+    p.add_argument('--idle',type=Path,help='Optional SONIC idle directory; otherwise use bundled Kimodo idle')
     p.add_argument('--upstream',type=Path,default=Path(__file__).resolve().parents[3]/'GR00T-WholeBodyControl')
     args=p.parse_args()
-    model=load_model(args.upstream); arrays, q=read_clip(args.idle,model)
+    import tempfile
+    from sonic_laptop.idle import resolve_idle
+    from sonic_laptop.limits import load as load_limits
+    temporary=tempfile.TemporaryDirectory(prefix='sonic-sim-idle-')
+    limits=load_limits()
+    idle=resolve_idle(args.idle,Path(temporary.name),args.upstream,limits)
+    model=load_model(args.upstream); arrays, q=read_clip(idle,model,limits)
     config=ArgsConfig().load_wbc_yaml(); config['INTERFACE']='lo';config['DOMAIN_ID']=0
     wrapper=SimWrapper(instantiate_g1_robot_model(),'guarded_sonic_sim',config,onscreen=True,offscreen=False)
     sim=wrapper.sim;env=sim.sim_env

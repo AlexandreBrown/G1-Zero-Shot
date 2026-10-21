@@ -40,7 +40,8 @@ with tempfile.TemporaryDirectory() as temp:
     assert all(dialog.results.item(row,'values')[1]=='Checks passed' for row in dialog.results.get_children())
     assert (path/'converted/wave/import-report.json').exists()
     dialog.close();assert panel.import_dialog is None
-    with patch('tkinter.filedialog.askdirectory',return_value=str(path/'converted/idle')):
+    panel.idle_override=path/'converted/idle'
+    with patch('tkinter.filedialog.askdirectory',side_effect=AssertionError('Idle picker should not open')):
         panel.load_library(path/'converted')
     wait(root,lambda:not panel.library_busy)
     assert [c['name'] for c in panel.catalog]==['idle','wave']

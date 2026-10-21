@@ -62,10 +62,8 @@ def stage_library(idle, folder, destination, model, limits=None):
     limits=validate_limits(limits)
     destination = Path(destination)
     destination.mkdir(parents=True, exist_ok=False)
-    candidates = [Path(idle)] + [p for p in sorted(Path(folder).iterdir())
+    candidates = [Path(idle)] + [p for p in (sorted(Path(folder).iterdir()) if folder else [])
                                 if p.is_dir() and (p/'joint_pos.csv').exists() and p.resolve()!=Path(idle).resolve()]
-    if len(candidates) < 2:
-        raise ValueError('Motion folder contains no clips other than idle')
     catalog, anchor, anchor_arrays = [], None, None
     for i, path in enumerate(candidates):
         # Copy first, validate the immutable session snapshot, never symlink mutable motions.
