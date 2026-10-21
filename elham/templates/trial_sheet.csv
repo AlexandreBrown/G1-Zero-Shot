@@ -1,0 +1,1 @@
+time,trial_folder,policy,policy_md5_decoder,motion,slack_cm,battery_start_pct,battery_end_pct,max_motor_temp_c,hottest_joint,outcome(completed/aborted/fell),abort_reason,video_files,notes

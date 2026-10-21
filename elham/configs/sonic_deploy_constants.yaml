@@ -1,0 +1,36 @@
+# SONIC deploy control constants per joint, HARDWARE order (index 0..28), as compiled into g1_deploy_onnx_ref
+# (gear_sonic_deploy/src/g1/g1_deploy_onnx_ref/include/policy_parameters.hpp @ b042411; checked equal to Isaac
+# training robots/g1.py for kp, kd, action scale and default pose). Joint target sent to the motor:
+#   q_target[hw i] = default[i] + action_isaaclab[ISAACLAB_TO_HW[i]] * action_scale[i]
+# with ISAACLAB_TO_HW = isaaclab_to_mujoco in policy_parameters.hpp (used by scripts/build_dataset.py).
+isaaclab_to_hw: [0, 3, 6, 9, 13, 17, 1, 4, 7, 10, 14, 18, 2, 5, 8, 11, 15, 19, 21, 23, 25, 27, 12, 16, 20, 22, 24, 26, 28]
+joints:
+  - {index:  0, name: left_hip_pitch_joint, kp: 99.098428, kd: 6.308802, action_scale: 0.350661, default: -0.312}
+  - {index:  1, name: left_hip_roll_joint, kp: 99.098428, kd: 6.308802, action_scale: 0.350661, default: 0.0}
+  - {index:  2, name: left_hip_yaw_joint, kp: 40.179238, kd: 2.557890, action_scale: 0.547546, default: 0.0}
+  - {index:  3, name: left_knee_joint, kp: 99.098428, kd: 6.308802, action_scale: 0.350661, default: 0.669}
+  - {index:  4, name: left_ankle_pitch_joint, kp: 28.501246, kd: 1.814446, action_scale: 0.438577, default: -0.363}
+  - {index:  5, name: left_ankle_roll_joint, kp: 28.501246, kd: 1.814446, action_scale: 0.438577, default: 0.0}
+  - {index:  6, name: right_hip_pitch_joint, kp: 99.098428, kd: 6.308802, action_scale: 0.350661, default: -0.312}
+  - {index:  7, name: right_hip_roll_joint, kp: 99.098428, kd: 6.308802, action_scale: 0.350661, default: 0.0}
+  - {index:  8, name: right_hip_yaw_joint, kp: 40.179238, kd: 2.557890, action_scale: 0.547546, default: 0.0}
+  - {index:  9, name: right_knee_joint, kp: 99.098428, kd: 6.308802, action_scale: 0.350661, default: 0.669}
+  - {index: 10, name: right_ankle_pitch_joint, kp: 28.501246, kd: 1.814446, action_scale: 0.438577, default: -0.363}
+  - {index: 11, name: right_ankle_roll_joint, kp: 28.501246, kd: 1.814446, action_scale: 0.438577, default: 0.0}
+  - {index: 12, name: waist_yaw_joint, kp: 40.179238, kd: 2.557890, action_scale: 0.547546, default: 0.0}
+  - {index: 13, name: waist_roll_joint, kp: 28.501246, kd: 1.814446, action_scale: 0.438577, default: 0.0}
+  - {index: 14, name: waist_pitch_joint, kp: 28.501246, kd: 1.814446, action_scale: 0.438577, default: 0.0}
+  - {index: 15, name: left_shoulder_pitch_joint, kp: 14.250623, kd: 0.907223, action_scale: 0.438577, default: 0.2}
+  - {index: 16, name: left_shoulder_roll_joint, kp: 14.250623, kd: 0.907223, action_scale: 0.438577, default: 0.2}
+  - {index: 17, name: left_shoulder_yaw_joint, kp: 14.250623, kd: 0.907223, action_scale: 0.438577, default: 0.0}
+  - {index: 18, name: left_elbow_joint, kp: 14.250623, kd: 0.907223, action_scale: 0.438577, default: 0.6}
+  - {index: 19, name: left_wrist_roll_joint, kp: 14.250623, kd: 0.907223, action_scale: 0.438577, default: 0.0}
+  - {index: 20, name: left_wrist_pitch_joint, kp: 16.778327, kd: 1.068142, action_scale: 0.074501, default: 0.0}
+  - {index: 21, name: left_wrist_yaw_joint, kp: 16.778327, kd: 1.068142, action_scale: 0.074501, default: 0.0}
+  - {index: 22, name: right_shoulder_pitch_joint, kp: 14.250623, kd: 0.907223, action_scale: 0.438577, default: 0.2}
+  - {index: 23, name: right_shoulder_roll_joint, kp: 14.250623, kd: 0.907223, action_scale: 0.438577, default: -0.2}
+  - {index: 24, name: right_shoulder_yaw_joint, kp: 14.250623, kd: 0.907223, action_scale: 0.438577, default: 0.0}
+  - {index: 25, name: right_elbow_joint, kp: 14.250623, kd: 0.907223, action_scale: 0.438577, default: 0.6}
+  - {index: 26, name: right_wrist_roll_joint, kp: 14.250623, kd: 0.907223, action_scale: 0.438577, default: 0.0}
+  - {index: 27, name: right_wrist_pitch_joint, kp: 16.778327, kd: 1.068142, action_scale: 0.074501, default: 0.0}
+  - {index: 28, name: right_wrist_yaw_joint, kp: 16.778327, kd: 1.068142, action_scale: 0.074501, default: 0.0}

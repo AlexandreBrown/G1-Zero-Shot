@@ -1,0 +1,47 @@
+# Motion ladder for the first real-G1 sessions (docs/MOTIONS.md has the evidence for every entry).
+# Each stage is one folder of deploy reference motions; scripts/export_motions.py builds them.
+# `upstream:` entries are NVIDIA's shipped examples (gear_sonic_deploy/reference/example), copied as is.
+# `asap:` entries are our ASAP motions converted to SONIC format (asap_<name>.pkl, 30 fps), exported at 50 Hz.
+# Never add the motions under `excluded` without a new preview (scripts/preview_mujoco.py --delay-ms 20).
+# Root travel decides the gantry: fixed hoist point = travel <= 0.5 m only (motion_report.csv max_travel_m).
+
+stages:
+  stage0_stand:
+    note: >-
+      Stand test. Press ] only (the policy holds frame 0); do not play. Frame 0 is nearly level (-1.4 deg held in
+      simulation), so a lean on the robot shows; most other frame-0 poses lean on purpose (docs/MOTIONS.md).
+    asap: [step_forward_back_lv2]
+  stage1_gentle:
+    note: Retained motions with both feet mostly down, low joint speed, travel <= 0.47 m.
+    asap: [step_forward_forward_lv1, squat_lv1, step_forward_back_lv1, kick_lv2]
+  stage2_retained:
+    note: The rest of the retained motions, ordered by travel and rotation (walks need ~2.3 m of floor).
+    asap:
+      - single_foot_balance_lv1
+      - step_forward_forward_lv2
+      - step_forward_back_lv2
+      - kick_lv3
+      - walk_lv1
+      - walk_lv2
+      - walk_lv3
+      - walk_lv4
+      - step_forward_forward_lv3
+      - step_forward_back_lv3
+      - lebron1_lv1
+      - APT_lv1
+      - shoot_lv1
+      - TigerWoods_lv1
+  stage3_new:
+    note: Two jump-free motions outside SONIC's training set (the base tracks them loosely).
+    asap: [Bolt_lv1, lebron2_lv1]
+  optional_nvidia_examples:
+    note: >-
+      NVIDIA's shipped examples, for comparing with their setup only. Not gentle: the squat reaches pelvis 0.28 m,
+      the kick reaches 91 % of a joint speed limit. Not part of the ladder.
+    upstream: [squat_001__A359, forward_lunge_R_001__A359_M]
+
+excluded:
+  SpiderMan_lv2: the base never learned it; pelvis down to 0.45 m.
+  jump_degree_lv1-5, jump_forward_lv1-5, single_foot_jump_lv1-2, side_jump_lv3-4, CR7_lv1-2, Kobe_lv1: flight phases.
+  single_foot_balance_lv4, squat_lv3: the base already falls on them in simulation.
+  single_foot_balance_lv2: broken reference (root height glitch).

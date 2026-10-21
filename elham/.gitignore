@@ -1,0 +1,6 @@
+artifacts/
+logs/
+*.onnx
+*.trt
+*.engine
+*.npz

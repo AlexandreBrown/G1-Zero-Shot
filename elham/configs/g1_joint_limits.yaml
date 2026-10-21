@@ -1,0 +1,41 @@
+# Unitree G1 29-DoF joint table in HARDWARE (MuJoCo / LowState motor) order, index 0..28.
+# Sources (GR00T-WholeBodyControl @ b042411):
+#   pos_lo/pos_hi, tau_mjcf: gear_sonic/data/assets/robot_description/mjcf/g1_29dof_rev_1_0.xml (range, actuatorfrcrange)
+#   tau_urdf, vel_urdf:      gear_sonic/data/robots/g1/g1_29dof_with_hand_rev_1_0.urdf (<limit effort velocity>)
+#   tau_train, vel_train:    gear_sonic/envs/manager_env/robots/g1.py effort_limit_sim / velocity_limit_sim (Isaac training)
+#   default:                 gear_sonic_deploy/src/g1/g1_deploy_onnx_ref/include/policy_parameters.hpp default_angles
+# tau_gate = min(tau_train, tau_mjcf): the limit the simulation gate and the log analyzer use until the robot's
+# hip motor revision is known (7520-14: 88 Nm hip pitch; 7520-22: 139 Nm). Training lets hip pitch AND hip roll
+# reach 139 Nm; Unitree's rev-1.0 model says hip pitch 88 Nm. The URDF's 35 Nm at the ankles and waist roll/pitch
+# (tau_urdf) disagrees with the MJCF and training (50 Nm) and is reported, not gated: NVIDIA's released base
+# already exceeds 35 Nm at the ankle on a gentle squat in simulation. vel_gate = min(vel_train, vel_urdf).
+joints:
+  - {index:  0, name: left_hip_pitch_joint, pos_lo: -2.5307, pos_hi: 2.8798, default: -0.312, tau_train: 139.0, tau_mjcf: 88.0, tau_urdf: 88.0, tau_gate: 88.0, vel_train: 20.0, vel_urdf: 32.0, vel_gate: 20.0}
+  - {index:  1, name: left_hip_roll_joint, pos_lo: -0.5236, pos_hi: 2.9671, default: 0, tau_train: 139.0, tau_mjcf: 139.0, tau_urdf: 139.0, tau_gate: 139.0, vel_train: 20.0, vel_urdf: 20.0, vel_gate: 20.0}
+  - {index:  2, name: left_hip_yaw_joint, pos_lo: -2.7576, pos_hi: 2.7576, default: 0, tau_train: 88.0, tau_mjcf: 88.0, tau_urdf: 88.0, tau_gate: 88.0, vel_train: 32.0, vel_urdf: 32.0, vel_gate: 32.0}
+  - {index:  3, name: left_knee_joint, pos_lo: -0.087267, pos_hi: 2.8798, default: 0.669, tau_train: 139.0, tau_mjcf: 139.0, tau_urdf: 139.0, tau_gate: 139.0, vel_train: 20.0, vel_urdf: 20.0, vel_gate: 20.0}
+  - {index:  4, name: left_ankle_pitch_joint, pos_lo: -0.87267, pos_hi: 0.5236, default: -0.363, tau_train: 50.0, tau_mjcf: 50.0, tau_urdf: 35.0, tau_gate: 50.0, vel_train: 37.0, vel_urdf: 30.0, vel_gate: 30.0}
+  - {index:  5, name: left_ankle_roll_joint, pos_lo: -0.2618, pos_hi: 0.2618, default: 0, tau_train: 50.0, tau_mjcf: 50.0, tau_urdf: 35.0, tau_gate: 50.0, vel_train: 37.0, vel_urdf: 30.0, vel_gate: 30.0}
+  - {index:  6, name: right_hip_pitch_joint, pos_lo: -2.5307, pos_hi: 2.8798, default: -0.312, tau_train: 139.0, tau_mjcf: 88.0, tau_urdf: 88.0, tau_gate: 88.0, vel_train: 20.0, vel_urdf: 32.0, vel_gate: 20.0}
+  - {index:  7, name: right_hip_roll_joint, pos_lo: -2.9671, pos_hi: 0.5236, default: 0, tau_train: 139.0, tau_mjcf: 139.0, tau_urdf: 139.0, tau_gate: 139.0, vel_train: 20.0, vel_urdf: 20.0, vel_gate: 20.0}
+  - {index:  8, name: right_hip_yaw_joint, pos_lo: -2.7576, pos_hi: 2.7576, default: 0, tau_train: 88.0, tau_mjcf: 88.0, tau_urdf: 88.0, tau_gate: 88.0, vel_train: 32.0, vel_urdf: 32.0, vel_gate: 32.0}
+  - {index:  9, name: right_knee_joint, pos_lo: -0.087267, pos_hi: 2.8798, default: 0.669, tau_train: 139.0, tau_mjcf: 139.0, tau_urdf: 139.0, tau_gate: 139.0, vel_train: 20.0, vel_urdf: 20.0, vel_gate: 20.0}
+  - {index: 10, name: right_ankle_pitch_joint, pos_lo: -0.87267, pos_hi: 0.5236, default: -0.363, tau_train: 50.0, tau_mjcf: 50.0, tau_urdf: 35.0, tau_gate: 50.0, vel_train: 37.0, vel_urdf: 30.0, vel_gate: 30.0}
+  - {index: 11, name: right_ankle_roll_joint, pos_lo: -0.2618, pos_hi: 0.2618, default: 0, tau_train: 50.0, tau_mjcf: 50.0, tau_urdf: 35.0, tau_gate: 50.0, vel_train: 37.0, vel_urdf: 30.0, vel_gate: 30.0}
+  - {index: 12, name: waist_yaw_joint, pos_lo: -2.618, pos_hi: 2.618, default: 0, tau_train: 88.0, tau_mjcf: 88.0, tau_urdf: 88.0, tau_gate: 88.0, vel_train: 32.0, vel_urdf: 32.0, vel_gate: 32.0}
+  - {index: 13, name: waist_roll_joint, pos_lo: -0.52, pos_hi: 0.52, default: 0, tau_train: 50.0, tau_mjcf: 50.0, tau_urdf: 35.0, tau_gate: 50.0, vel_train: 37.0, vel_urdf: 30.0, vel_gate: 30.0}
+  - {index: 14, name: waist_pitch_joint, pos_lo: -0.52, pos_hi: 0.52, default: 0, tau_train: 50.0, tau_mjcf: 50.0, tau_urdf: 35.0, tau_gate: 50.0, vel_train: 37.0, vel_urdf: 30.0, vel_gate: 30.0}
+  - {index: 15, name: left_shoulder_pitch_joint, pos_lo: -3.0892, pos_hi: 2.6704, default: 0.2, tau_train: 25.0, tau_mjcf: 25.0, tau_urdf: 25.0, tau_gate: 25.0, vel_train: 37.0, vel_urdf: 37.0, vel_gate: 37.0}
+  - {index: 16, name: left_shoulder_roll_joint, pos_lo: -1.5882, pos_hi: 2.2515, default: 0.2, tau_train: 25.0, tau_mjcf: 25.0, tau_urdf: 25.0, tau_gate: 25.0, vel_train: 37.0, vel_urdf: 37.0, vel_gate: 37.0}
+  - {index: 17, name: left_shoulder_yaw_joint, pos_lo: -2.618, pos_hi: 2.618, default: 0, tau_train: 25.0, tau_mjcf: 25.0, tau_urdf: 25.0, tau_gate: 25.0, vel_train: 37.0, vel_urdf: 37.0, vel_gate: 37.0}
+  - {index: 18, name: left_elbow_joint, pos_lo: -1.0472, pos_hi: 2.0944, default: 0.6, tau_train: 25.0, tau_mjcf: 25.0, tau_urdf: 25.0, tau_gate: 25.0, vel_train: 37.0, vel_urdf: 37.0, vel_gate: 37.0}
+  - {index: 19, name: left_wrist_roll_joint, pos_lo: -1.97222, pos_hi: 1.97222, default: 0, tau_train: 25.0, tau_mjcf: 25.0, tau_urdf: 25.0, tau_gate: 25.0, vel_train: 37.0, vel_urdf: 37.0, vel_gate: 37.0}
+  - {index: 20, name: left_wrist_pitch_joint, pos_lo: -1.61443, pos_hi: 1.61443, default: 0, tau_train: 5.0, tau_mjcf: 5.0, tau_urdf: 5.0, tau_gate: 5.0, vel_train: 22.0, vel_urdf: 22.0, vel_gate: 22.0}
+  - {index: 21, name: left_wrist_yaw_joint, pos_lo: -1.61443, pos_hi: 1.61443, default: 0, tau_train: 5.0, tau_mjcf: 5.0, tau_urdf: 5.0, tau_gate: 5.0, vel_train: 22.0, vel_urdf: 22.0, vel_gate: 22.0}
+  - {index: 22, name: right_shoulder_pitch_joint, pos_lo: -3.0892, pos_hi: 2.6704, default: 0.2, tau_train: 25.0, tau_mjcf: 25.0, tau_urdf: 25.0, tau_gate: 25.0, vel_train: 37.0, vel_urdf: 37.0, vel_gate: 37.0}
+  - {index: 23, name: right_shoulder_roll_joint, pos_lo: -2.2515, pos_hi: 1.5882, default: -0.2, tau_train: 25.0, tau_mjcf: 25.0, tau_urdf: 25.0, tau_gate: 25.0, vel_train: 37.0, vel_urdf: 37.0, vel_gate: 37.0}
+  - {index: 24, name: right_shoulder_yaw_joint, pos_lo: -2.618, pos_hi: 2.618, default: 0, tau_train: 25.0, tau_mjcf: 25.0, tau_urdf: 25.0, tau_gate: 25.0, vel_train: 37.0, vel_urdf: 37.0, vel_gate: 37.0}
+  - {index: 25, name: right_elbow_joint, pos_lo: -1.0472, pos_hi: 2.0944, default: 0.6, tau_train: 25.0, tau_mjcf: 25.0, tau_urdf: 25.0, tau_gate: 25.0, vel_train: 37.0, vel_urdf: 37.0, vel_gate: 37.0}
+  - {index: 26, name: right_wrist_roll_joint, pos_lo: -1.97222, pos_hi: 1.97222, default: 0, tau_train: 25.0, tau_mjcf: 25.0, tau_urdf: 25.0, tau_gate: 25.0, vel_train: 37.0, vel_urdf: 37.0, vel_gate: 37.0}
+  - {index: 27, name: right_wrist_pitch_joint, pos_lo: -1.61443, pos_hi: 1.61443, default: 0, tau_train: 5.0, tau_mjcf: 5.0, tau_urdf: 5.0, tau_gate: 5.0, vel_train: 22.0, vel_urdf: 22.0, vel_gate: 22.0}
+  - {index: 28, name: right_wrist_yaw_joint, pos_lo: -1.61443, pos_hi: 1.61443, default: 0, tau_train: 5.0, tau_mjcf: 5.0, tau_urdf: 5.0, tau_gate: 5.0, vel_train: 22.0, vel_urdf: 22.0, vel_gate: 22.0}
