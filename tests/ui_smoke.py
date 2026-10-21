@@ -5,6 +5,8 @@ from sonic_laptop.app import Panel,DemoSession
 catalog=[dict(index=i,name=name,frames=60) for i,name in enumerate(['Idle','Wave demo','Raise demo'])]
 root=tk.Tk();session=DemoSession(catalog);p=Panel(root,session,catalog)
 root.update()
+assert p.stop_button.winfo_height()>=50
+assert p.stop_button.winfo_y()+p.stop_button.winfo_height()<=root.winfo_height()
 assert str(p.start_button['state'])=='disabled'
 p.arm_button.focus_force()
 root.update()
@@ -21,6 +23,11 @@ assert session.status['index']==1
 session.status.update(frame=59,playing=False);p.tick();p.tick()
 assert session.status['index']==2
 p.keys.update({'space','w'});p.enable_keyboard();assert not p.keys;p.tick()
+p.key_down(SimpleNamespace(keysym='space'));p.key_down(SimpleNamespace(keysym='w'))
+assert not p.keys, 'Autorepeat of held keys must not enable movement'
+p.key_up(SimpleNamespace(keysym='space'));p.key_up(SimpleNamespace(keysym='w'))
+import time
+time.sleep(.03);root.update()
 p.key_down(SimpleNamespace(keysym='space'));p.key_down(SimpleNamespace(keysym='w'))
 assert {'space','w'} <= p.keys
 from unittest.mock import Mock

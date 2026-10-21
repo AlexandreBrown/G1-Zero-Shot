@@ -28,9 +28,9 @@ public:
     std::string dir;
     std::array<double,29> init{};
     std::atomic<bool> fault{false}, waiting{false}, setup_ready{false};
-    std::atomic<double> input_tick{0};
+    std::atomic<double> input_tick{0}, setup_error{0}, setup_speed{0}, settled_seconds{0};
     double settled_since=0;
-    std::mutex mutex;
+    std::mutex mutex, lease_mutex;
     std::string reason;
     double checked=0, previous_time=0;
     std::array<double,29> previous{};
@@ -48,6 +48,7 @@ public:
         if(!fault.load()) { reason=why; fault.store(true); std::cerr<<"SONIC GUARD LATCHED: "<<why<<std::endl; }
     }
     bool lease() {
+        std::lock_guard<std::mutex> lock(lease_mutex);
         double t=now();
         if(t-checked>=.02) {
             checked=t;
@@ -85,11 +86,18 @@ public:
         if(clearance(target)<minimum_clearance||clearance(measured)<minimum_clearance) {
             trip("Hand/body envelope clearance <25 mm"); return false;
         }
+        double error=0, speed=0;
+        for(int i=0;i<29;++i) {
+            error=std::max(error,std::abs(measured[i]-init[i]));
+            speed=std::max(speed,std::abs(double(state.motor_state()[i].dq())));
+        }
+        setup_error.store(error); setup_speed.store(speed);
         bool settled=waiting.load();
         for(int i=0;i<29;++i)
             if(std::abs(measured[i]-init[i])>.12 || std::abs(state.motor_state()[i].dq())>.3) settled=false;
         if(!settled) settled_since=0;
         else if(!settled_since) settled_since=t;
+        settled_seconds.store(settled_since>0 ? t-settled_since : 0);
         setup_ready.store(settled_since>0 && t-settled_since>=2);
         previous=target; previous_time=t; return true;
     }
@@ -98,7 +106,9 @@ public:
         std::lock_guard<std::mutex> lock(mutex);
         std::ofstream out(dir+"/status.tmp");
         out<<seq<<' '<<state<<' '<<index<<' '<<frame<<' '<<play<<' '<<planner<<' '<<fault.load()<<' '<<setup_ready.load()<<'\n'
-           <<result<<'\n'<<reason<<'\n'; out.close();
+           <<result<<'\n'<<reason<<'\n'
+           <<"Joint error "<<setup_error.load()<<" rad / 0.12; speed "<<setup_speed.load()
+           <<" rad/s / 0.30; settled "<<settled_seconds.load()<<" s / 2.0\n"; out.close();
         std::rename((dir+"/status.tmp").c_str(),(dir+"/status").c_str());
     }
 };

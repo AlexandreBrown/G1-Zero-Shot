@@ -26,6 +26,9 @@ class Session:
         self.stopped = False
         self.status = None
         self.log = None
+        self.log_offset = 0
+        self.log_fragment = ""
+        self.setup_phase = "Starting controller; loading models"
         self.last_status_mtime = 0
         self.last_status_time = time.monotonic()
 
@@ -40,7 +43,7 @@ class Session:
         manifest = json.loads((self.build/'binary-manifest.json').read_text())
         if hashlib.sha256(binary.read_bytes()).hexdigest()!=manifest['sha256']:
             raise ValueError('Guarded binary hash mismatch; rebuild')
-        if (self.build/'GUARDED_BUILD').read_text().strip()!='sonic-laptop-v2':
+        if (self.build/'GUARDED_BUILD').read_text().strip()!='sonic-laptop-v3':
             raise ValueError('Not a guarded build')
         args = [str(binary),self.interface,'policy/release/model_decoder.onnx',str(self.directory/'motions'),
                 '--obs-config','policy/release/observation_config.yaml',
@@ -73,7 +76,7 @@ class Session:
             lines=path.read_text().splitlines()
             seq,state,index,frame,playing,planner,fault,setup_ready=map(int,lines[0].split())
             result=dict(seq=seq,state=state,index=index,frame=frame,playing=bool(playing),
-                        setup_ready=bool(setup_ready),planner=bool(planner),fault=bool(fault),result=lines[1],reason=lines[2] if len(lines)>2 else '')
+                        setup_ready=bool(setup_ready),planner=bool(planner),fault=bool(fault),result=lines[1],reason=lines[2] if len(lines)>2 else '',detail=lines[3] if len(lines)>3 else '')
             stamp=path.stat().st_mtime_ns
             if stamp!=self.last_status_mtime:
                 self.last_status_mtime=stamp; self.last_status_time=time.monotonic()
@@ -85,6 +88,21 @@ class Session:
         if self.status and time.monotonic()-self.last_status_time>1:
             self.stop()  # Input/status loop stalled, even if UI is still responsive.
         return self.status
+
+    def read_activity(self):
+        """Bounded incremental log reads; never wait on controller output."""
+        try:
+            with (self.directory/'controller.log').open('rb') as stream:
+                if stream.seek(0,2)<self.log_offset:self.log_offset=0;self.log_fragment=''
+                stream.seek(self.log_offset);chunk=stream.read(65536);self.log_offset=stream.tell()
+        except FileNotFoundError:return []
+        text=self.log_fragment+chunk.decode('utf-8',errors='replace')
+        lines=text.split('\n');self.log_fragment=lines.pop()[-4096:]
+        import re
+        lines=[re.sub(r'\x1b\[[0-9;]*[A-Za-z]','',line)[-1000:] for line in lines]
+        for line in lines:
+            if '[Setup] ' in line:self.setup_phase=line.split('[Setup] ',1)[1]
+        return lines
 
     def command(self, command, argument=0):
         if self.stopped or not self.process or self.process.poll() is not None:

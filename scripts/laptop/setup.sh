@@ -11,7 +11,8 @@ mkdir -p "$DEPS"
 sudo apt-get update
 sudo apt-get install -y build-essential cmake git-lfs curl python3-venv python3-tk \
  libyaml-cpp-dev libeigen3-dev libmsgpack-dev libmsgpack-cxx-dev libzmq3-dev cppzmq-dev \
- nlohmann-json3-dev zlib1g-dev libgtest-dev libboost-dev libgl1 libglfw3
+ nlohmann-json3-dev zlib1g-dev libgtest-dev libboost-dev libgl1 libglfw3 fonts-dejavu-core
+git -C "$UPSTREAM" lfs pull --include="gear_sonic_deploy/g1/**" --exclude=""
 # Require a working CUDA 12 toolkit; do not replace a laptop's NVIDIA driver.
 CUDA_HOME="${CUDA_HOME:-/usr/local/cuda}"
 if [[ ! -f "$CUDA_HOME/include/cuda_runtime.h" ]]; then
@@ -35,7 +36,7 @@ if [[ ! -f "$onnxruntime_ROOT/include/onnxruntime_cxx_api.h" ]]; then
  curl --fail --location --retry 3 'https://github.com/microsoft/onnxruntime/releases/download/v1.16.3/onnxruntime-linux-x64-1.16.3.tgz' -o "$DEPS/onnxruntime.tgz"
  tar -xzf "$DEPS/onnxruntime.tgz" -C "$DEPS"
 fi
-python3 -m venv "$ROOT/.venv_laptop"
+/usr/bin/python3 -m venv "$ROOT/.venv_laptop"
 "$ROOT/.venv_laptop/bin/pip" install -r "$ROOT/sonic_laptop/requirements.txt"
 # Persist only paths; no conda/Mila/OpenSSL paths in this laptop environment.
 ENV_FILE="$ROOT/artifacts/laptop/env.sh"

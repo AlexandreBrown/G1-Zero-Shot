@@ -7,7 +7,7 @@ import unittest
 import numpy as np
 from sonic_laptop.model import load_model, clearance
 from sonic_laptop.motions import stage_library
-from sonic_laptop.prepare import generate_model, patch
+from sonic_laptop.prepare import generate_model, patch, INPUT
 from sonic_laptop.session import Session
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -69,9 +69,17 @@ class LaptopTests(unittest.TestCase):
     def test_patch_and_cpp_gate(self):
         tree=patch(UPSTREAM/'gear_sonic_deploy',self.p/'deploy')
         text=(tree/'src/g1/g1_deploy_onnx_ref/src/g1_deploy_onnx_ref.cpp').read_text()
-        self.assertNotIn('dex3_hands_.initialize(',text)
+        self.assertIn('if(guard_.fault.load()) dex3_hands_.writeDampingOnly();',text)
+        self.assertNotIn('dex3_hands_.open(',text)
+        self.assertNotIn('dex3_hands_.close(',text)
         self.assertNotIn('dex3_hands_.writeOnce(',text)
         self.assertIn('current_motion_->timesteps - 1',text)
+        self.assertIn('Setup failed: ',text)
+        sdk=UPSTREAM/'gear_sonic_deploy/thirdparty/unitree_sdk2'
+        subprocess.run(['g++','-std=c++17','-fsyntax-only','-x','c++','-I/usr/include/eigen3',
+            '-I'+str(sdk/'include'),'-I'+str(sdk/'thirdparty/include'),
+            '-I'+str(sdk/'thirdparty/include/ddscxx'),
+            '-include',str(tree/'src/g1/g1_deploy_onnx_ref/include/dex3_hands.hpp'),'/dev/null'],check=True)
         (self.p/'guard_model.hpp').write_text(generate_model(self.model))
         (self.p/'guard.hpp').write_text((ROOT/'sonic_laptop/native/guard.hpp').read_text())
         (self.p/'init.txt').write_text(' '.join(map(str,self.q)))
@@ -110,6 +118,36 @@ int main(int argc,char**argv) {
         (self.p/'test.cpp').write_text(source)
         subprocess.run(['g++','-std=c++17','-O3','-fno-fast-math','-I/usr/include/eigen3',str(self.p/'test.cpp'),'-o',str(self.p/'gate')],check=True)
         subprocess.run([str(self.p/'gate'),str(self.p)],check=True)
+    def test_native_keyboard_and_ipc(self):
+        tree=patch(UPSTREAM/'gear_sonic_deploy',self.p/'deploy')
+        include=tree/'src/g1/g1_deploy_onnx_ref/include'
+        (include/'guarded_input.inc').write_text(INPUT)
+        (self.p/'init.txt').write_text(' '.join(map(str,self.q)))
+        subprocess.run(['g++','-std=c++17','-O2','-fno-fast-math','-I/usr/include/eigen3',
+                        '-I'+str(include),str(ROOT/'tests/native_keyboard.cpp'),'-lyaml-cpp','-lz',
+                        '-o',str(self.p/'keyboard')],check=True)
+        subprocess.run([str(self.p/'keyboard'),str(self.p)],check=True,timeout=10)
+
+    def test_hand_damping_command(self):
+        sdk=UPSTREAM/'gear_sonic_deploy/thirdparty/unitree_sdk2'
+        subprocess.run(['g++','-std=c++17','-I'+str(sdk/'include'),
+            '-I'+str(sdk/'thirdparty/include'),'-I'+str(sdk/'thirdparty/include/ddscxx'),
+            '-I'+str(ROOT/'sonic_laptop/native'),str(ROOT/'tests/native_hand_damping.cpp'),
+            '-o',str(self.p/'hands')],check=True)
+        subprocess.run([str(self.p/'hands')],check=True)
+
+    def test_activity_log_and_status(self):
+        s=Session(self.p,self.p,'lo',True)
+        (self.p/'controller.log').write_text('[Setup] Loading policy\npartial')
+        self.assertEqual(s.read_activity(),['[Setup] Loading policy'])
+        self.assertEqual(s.setup_phase,'Loading policy')
+        with (self.p/'controller.log').open('a') as f:f.write(' line\n')
+        self.assertEqual(s.read_activity(),['partial line'])
+        self.assertEqual(s.read_activity(),[])
+        (self.p/'status').write_text('1 1 0 0 0 0 0 1\nok\n\nJoint settling details\n')
+        self.assertTrue(s.poll()['setup_ready'])
+        self.assertEqual(s.status['detail'],'Joint settling details')
+
     def test_idle_overrides_pending_move(self):
         from unittest.mock import Mock
         s=Session(self.p,self.p,'lo',True);s.process=Mock();s.process.poll.return_value=None

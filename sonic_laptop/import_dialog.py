@@ -9,14 +9,15 @@ ROOT=Path(__file__).resolve().parents[1]
 
 
 class ImportDialog:
-    def __init__(self,parent,on_close,on_library):
+    def __init__(self,parent,on_close,on_library,limits=None):
+        self.limits=limits
         self.on_close,self.on_library=on_close,on_library
         self.sources=[];self.events=queue.Queue();self.running=False;self.output_path=None
         self.window=tk.Toplevel(parent);self.window.title('Import Kimodo motions')
         self.window.geometry('780x610');self.window.minsize(740,580);self.window.transient(parent)
         self.window.protocol('WM_DELETE_WINDOW',self.close)
         frame=ttk.Frame(self.window,padding=24);frame.pack(fill='both',expand=True)
-        ttk.Label(frame,text='Import Kimodo',font=('Inter',20,'bold')).pack(anchor='w')
+        ttk.Label(frame,text='Import Kimodo',font=('DejaVu Sans',20,'bold')).pack(anchor='w')
         ttk.Label(frame,text='Convert G1 exports to SONIC. No robot connection required.',style='Muted.TLabel').pack(anchor='w',pady=(4,18))
         row=ttk.Frame(frame);row.pack(fill='x')
         self.file_button=ttk.Button(row,text='Choose files',command=self.choose_files);self.file_button.pack(side='left')
@@ -88,7 +89,7 @@ class ImportDialog:
                 from .import_kimodo import convert
                 for source in sources:
                     try:
-                        report=convert(source,output/source.stem,fps,ROOT.parent/'GR00T-WholeBodyControl',python)
+                        report=convert(source,output/source.stem,fps,ROOT.parent/'GR00T-WholeBodyControl',python,self.limits)
                         self.events.put(('result',source.stem,report,None))
                     except Exception as e:self.events.put(('result',source.stem,None,str(e)))
             except Exception as e:self.events.put(('error',str(e)))

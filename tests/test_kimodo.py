@@ -36,6 +36,16 @@ class KimodoTests(unittest.TestCase):
         catalog=stage_library(library/'idle',library,self.root/'session/motions',self.model)
         self.assertEqual([c['name'] for c in catalog],['idle','wave'])
         self.assertEqual((library/'wave/metadata.txt').read_text().split('Body part indexes:\n')[1].splitlines()[0],'[0]')
+    def test_audit_reports_all_failures(self):
+        from sonic_laptop.audit_kimodo import audit
+        source=self.save('audit.csv',self.qpos)
+        report=audit(source,30,UPSTREAM)
+        self.assertTrue(report['passed'])
+        bad=self.qpos.copy();bad[30,7]+=1;bad[40,0]+=1
+        report=audit(self.save('bad-audit.csv',bad),30,UPSTREAM)
+        self.assertFalse(report['checks']['reference_speed'])
+        self.assertFalse(report['checks']['root_displacement'])
+
     def test_time_and_quaternion_shortest_path(self):
         raw=self.qpos[:2].copy();raw[0,3:7]=Rotation.from_euler('z',170,degrees=True).as_quat()[[3,0,1,2]]
         raw[1,3:7]=-Rotation.from_euler('z',-170,degrees=True).as_quat()[[3,0,1,2]]

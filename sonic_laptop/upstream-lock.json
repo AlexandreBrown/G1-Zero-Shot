@@ -5,5 +5,6 @@
   "src/g1/g1_deploy_onnx_ref/include/input_interface/input_interface.hpp": "f6e51c33c2f140b50d946b0a422b3b527b3f9a4e29a5afce0b775c7a3c09c3c4",
   "src/g1/g1_deploy_onnx_ref/include/input_interface/keyboard_handler.hpp": "e6067e5717c8bc7f92080ce045546d48f6eeb1b157fa5e446ca78c25bc8f5930",
   "src/g1/g1_deploy_onnx_ref/include/motion_data_reader.hpp": "0fa19bc0fff66087e0eb47e41a8f0dbd0913fbb76e9409d4d57e84a04a7572b3",
-  "src/g1/g1_deploy_onnx_ref/include/policy_parameters.hpp": "b9332adf07c2c9b75c9b1e0756e57c7a1c2a890d8bb0aa53c3f1905fb739b791"
+  "src/g1/g1_deploy_onnx_ref/include/policy_parameters.hpp": "b9332adf07c2c9b75c9b1e0756e57c7a1c2a890d8bb0aa53c3f1905fb739b791",
+  "src/g1/g1_deploy_onnx_ref/include/dex3_hands.hpp": "cba9e3317ab7aca24e71f70abcd641377ed91a1612ac387c29d55192bb27ab47"
 }

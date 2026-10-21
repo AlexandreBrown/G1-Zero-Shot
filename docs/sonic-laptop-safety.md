@@ -4,7 +4,7 @@ This is commissioning code, not a validated safety controller. It reuses NVIDIA'
 pretrained SONIC encoder, decoder, planner and Unitree DDS transport. It modifies
 an isolated deployment copy under `artifacts/laptop/deploy`; the upstream checkout
 is untouched. GPU engines must be built on the laptop that will run inference.
-No Mila or Orin service is needed. No hand controller is started.
+No Mila or Orin service is needed. Hand publishers are initialized for damping on a latched stop; no finger motion commands are published.
 
 ## What the controls actually do
 
@@ -31,8 +31,8 @@ No Mila or Orin service is needed. No hand controller is started.
   requests cannot renew that deadline. If the input loop itself stalls >150 ms,
   the writer latches damping. Enabling keyboard clears held keys. This is a request, not a guaranteed physical speed
   or instantaneous stop. Return to clips requires a supported restart.
-- **Esc / red STOP:** the writer latches damping (`kp=0`, `kd=8`, feedforward torque
-  zero); no rearming in that session. This is **not torque-off** and **not standing**.
+- **Esc / red EMERGENCY STOP:** the writer latches body damping (`kp=0`, `kd=8`, feedforward torque
+  zero) and both-hand damping (`kp=0`, `kd=0.1`, desired velocity and feedforward torque zero); no rearming in that session. This is **not torque-off** and **not standing**.
   The gantry must support/catch the robot. Close likewise latches damping before
   asking whether the robot is supported and the process may terminate.
 
@@ -42,6 +42,14 @@ exits. A controller crash, power loss, DDS loss, frozen OS, or severed Ethernet
 cannot be made safe by this app. Keep the physical stop and mechanical support.
 Do not kill a live controller to resolve a lock while the robot is unsupported.
 Session directories contain its PID and log for recovery after supporting the robot.
+
+## Motion acceptance profiles
+
+The UI's **Acceptance limits** editor applies only before setup. Its speed, travel,
+tilt, velocity-consistency and hand-clearance settings are shared by importing and
+library validation. Changing a profile requires a fresh library validation; each
+session saves the exact values. See [ranges and CLI use](laptop-advanced.md#acceptance-limits).
+The limits below describe default reference checks and fixed runtime checks.
 
 ## Enforced checks
 
@@ -55,8 +63,17 @@ Session directories contain its PID and log for recovery after supporting the ro
 - Writer latches damping for command/state age >100 ms or UI heartbeat >300 ms.
   Polling adds up to 20 ms to the heartbeat threshold; OS scheduling can add delay.
   WAIT_FOR_CONTROL refreshes its standing command at control cadence.
-- Hands have **no DDS initialization/publisher/write** in this build. Other robot
-  services can still move them; verify their actual configuration independently.
+- Dex3 publishers are reserved for latched damping only. The damping path bypasses
+  normal gesture buffers and position smoothing. Finger open/close calls are removed.
+  Hand mode uses the existing driver's enabled joint mode and its default damping
+  gain of 0.1. This has been checked at command construction, not on physical hands.
+  Disable competing hand command publishers before commissioning; otherwise commands
+  can conflict. Damping does not guarantee collision avoidance or retain a grasp.
+- The input thread remains responsive during planner startup. Movement requests are
+  rejected until startup completes; a five-second startup timeout latches damping.
+  Setup handover exceptions also latch the guard instead of terminating the process.
+- Before the controller finishes loading, the UI reports stop as requested, not
+  acknowledged. A cancelled lease prevents the subsequent body-control handover.
 - A preliminary geometric envelope checks both commanded and measured poses:
   120 mm radius spheres offset 80 mm forward of each wrist against torso, head,
   pelvis, thighs, shins, and each other, requiring 25 mm modeled clearance.

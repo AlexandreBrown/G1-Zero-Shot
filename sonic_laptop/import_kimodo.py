@@ -13,6 +13,7 @@ import numpy as np
 from scipy.spatial.transform import Rotation, Slerp
 from .model import load_model
 from .motions import read_clip
+from .limits import load as load_limits, validate as validate_limits
 
 ROOT=Path(__file__).resolve().parents[1]
 # Default Kimodo MuJoCo CSV traversal order. Do not infer ordering from numeric data.
@@ -82,7 +83,8 @@ def derivative(values):
     return np.gradient(values,.02,axis=0,edge_order=2 if len(values)>2 else 1)
 
 
-def convert(source,output,source_fps,upstream,kimodo_python=None):
+def convert(source,output,source_fps,upstream,kimodo_python=None,limits=None):
+    limits=validate_limits(limits)
     source,output=Path(source),Path(output)
     if output.exists():raise FileExistsError(f'Refusing to overwrite {output}')
     model=load_model(upstream)
@@ -107,9 +109,9 @@ def convert(source,output,source_fps,upstream,kimodo_python=None):
                        header=','.join(f'{name}_{i}' for i in range(values.shape[1])))
         (staging/'metadata.txt').write_text(f'Metadata for: {output.name}\n\nBody part indexes:\n[0]\n\nTotal timesteps: {len(qpos)}\n')
         error=None
-        try:read_clip(staging,model)
+        try:read_clip(staging,model,limits)
         except ValueError as e:error=str(e).replace(str(staging),output.name)
-        report=dict(source=str(source.resolve()),source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),
+        report=dict(acceptance_limits=limits,source=str(source.resolve()),source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),
                     source_fps=source_fps,source_frames=len(raw),target_fps=50,target_frames=len(qpos),
                     source_duration_seconds=(len(raw)-1)/source_fps,
                     output_duration_seconds=(len(qpos)-1)/50,
@@ -133,7 +135,9 @@ def main(argv=None):
     p.add_argument('--source-fps',type=float,required=True,help='Actual generation/export FPS; never inferred from CSV')
     p.add_argument('--upstream',type=Path,default=ROOT.parent/'GR00T-WholeBodyControl')
     p.add_argument('--kimodo-python',type=Path,help='Python executable with Kimodo installed; only needed for NPZ')
+    p.add_argument('--limits',type=Path,help='Acceptance-limit JSON; defaults to the app settings')
     a=p.parse_args(argv)
+    limits=load_limits(a.limits)
     if not math.isfinite(a.source_fps) or a.source_fps<=0:p.error('--source-fps must be finite and positive')
     if a.output.exists():p.error('Output already exists; choose a new destination')
     inputs=sorted(f for f in a.source.iterdir() if f.is_file() and f.suffix.lower() in ('.csv','.npz')) if a.source.is_dir() else [a.source]
@@ -143,7 +147,7 @@ def main(argv=None):
     for source in inputs:
         output=a.output/source.stem if a.source.is_dir() else a.output
         try:
-            report=convert(source,output,a.source_fps,a.upstream,a.kimodo_python)
+            report=convert(source,output,a.source_fps,a.upstream,a.kimodo_python,limits)
             if report['commissioning_checks_passed']:
                 print(f'CONVERTED: {output} — {report["target_frames"]} frames at 50 Hz; per-clip checks passed')
             else:

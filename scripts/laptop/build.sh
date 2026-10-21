@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "$ROOT/artifacts/laptop/env.sh"
 DEPLOY="$ROOT/artifacts/laptop/deploy"
-[[ $(cat "$DEPLOY/GUARDED_BUILD") == sonic-laptop-v2 ]]
+[[ $(cat "$DEPLOY/GUARDED_BUILD") == sonic-laptop-v3 ]]
 cmake -S "$DEPLOY" -B "$DEPLOY/build" -DCMAKE_BUILD_TYPE=Release \
  -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
  -DTensorRT_FIND_COMPONENTS='nvinfer;nvinfer_plugin;nvonnxparser' \

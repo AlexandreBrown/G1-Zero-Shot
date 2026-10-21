@@ -7,8 +7,9 @@ import time
 import tkinter as tk
 from tkinter import ttk, messagebox
 from .session import Session
+from .limits import DEFAULTS, DEFAULT_PATH, load as load_limits, save as save_limits
 
-BG='#f4f6f8'; CARD='#ffffff'; TEXT='#172b3a'; MUTED='#667987'; ACCENT='#087f6b'
+BG='#f4f6f8'; CARD='#ffffff'; TEXT='#172b3a'; MUTED='#475b6b'; ACCENT='#087f6b'
 
 
 class DemoSession:
@@ -47,52 +48,64 @@ class DemoSession:
 class Panel:
     def __init__(self,root,session,catalog):
         self.root,self.session,self.catalog=root,session,catalog
-        self.keys=set();self.release_jobs={};self.queue=[];self.waiting_clip=None;self.idle_requested=False
+        self.limits=dict(getattr(session,'acceptance_limits',DEFAULTS))
+        self.limits_path=getattr(session,'limits_path',DEFAULT_PATH)
+        self.library_valid=getattr(session,'library_valid',True);self.limits_dialog=None
+        self.keys=set();self.blocked_keys=set();self.release_jobs={};self.queue=[];self.waiting_clip=None;self.idle_requested=False
         self.import_dialog=None;self.library_busy=False
+        self.activity_lines=[];self.last_activity_read=0;self.setup_started=None
         self.notice=tk.StringVar(value='Import Kimodo exports or load a SONIC library to get started.')
         self.state_text=tk.StringVar(value='Disarmed');self.source_text=tk.StringVar(value='Reference motions')
         self.motion_text=tk.StringVar(value='No motion playing');self.queue_text=tk.StringVar(value='0 remaining')
         self.progress_text=tk.StringVar(value='Playback keeps SONIC active when the motion ends.')
-        root.title('SONIC · Motion studio');root.geometry('1080x720');root.minsize(960,680);root.configure(bg=BG)
+        root.title('SONIC · Motion studio');root.geometry('1180x820');root.minsize(1000,740);root.configure(bg=BG)
         from tkinter import font
         available=set(font.families(root))
-        family=next((f for f in ('Inter','Inter Display','DejaVu Sans','Arial') if f in available),'TkDefaultFont')
+        family=next((f for f in ('DejaVu Sans','Arial','Liberation Sans') if f in available),'TkDefaultFont')
         self.font=family
         style=ttk.Style();style.theme_use('clam')
-        style.configure('.',font=(family,10),background=BG,foreground=TEXT)
+        style.configure('.',font=(family,12),background=BG,foreground=TEXT)
         style.configure('TFrame',background=BG);style.configure('Card.TFrame',background=CARD)
         style.configure('TLabel',background=BG,foreground=TEXT)
         style.configure('Muted.TLabel',foreground=MUTED)
         style.configure('Card.TLabel',background=CARD,foreground=TEXT)
-        style.configure('Caption.TLabel',background=CARD,foreground=MUTED,font=(family,9))
-        style.configure('TButton',background='#e8edf1',foreground=TEXT,borderwidth=0,padding=(14,10),font=(family,10))
+        style.configure('Caption.TLabel',background=CARD,foreground=MUTED,font=(family,11))
+        style.configure('TButton',background='#e8edf1',foreground=TEXT,borderwidth=0,padding=(14,10),font=(family,12))
         style.map('TButton',background=[('active','#dce5eb'),('disabled','#f0f3f5')],foreground=[('disabled','#9aa7b2')])
-        style.configure('Accent.TButton',background=ACCENT,foreground='white',font=(family,10,'bold'))
+        style.configure('Accent.TButton',background=ACCENT,foreground='white',font=(family,12,'bold'))
         style.map('Accent.TButton',background=[('active','#0b675b'),('disabled','#dceae6')],foreground=[('disabled','#879b96')])
         style.configure('TNotebook',background=BG,borderwidth=0)
         style.configure('TNotebook.Tab',padding=(20,12),background=BG,foreground=MUTED,borderwidth=0)
         style.map('TNotebook.Tab',background=[('selected',CARD)],foreground=[('selected',ACCENT)])
         style.configure('Horizontal.TProgressbar',background=ACCENT,troughcolor='#e8edf1',borderwidth=0)
         style.configure('Treeview',background=CARD,fieldbackground=CARD,foreground=TEXT,rowheight=34,borderwidth=0)
-        style.configure('Treeview.Heading',background=BG,foreground=MUTED,font=(family,10,'bold'),padding=8)
+        style.configure('Treeview.Heading',background=BG,foreground=MUTED,font=(family,12,'bold'),padding=8)
         outer=ttk.Frame(root,padding=(28,24));outer.pack(fill='both',expand=True)
         header=ttk.Frame(outer);header.pack(fill='x')
         ttk.Label(header,text='SONIC',font=(family,23,'bold')).pack(side='left')
         ttk.Label(header,text='Motion studio',style='Muted.TLabel',font=(family,14)).pack(side='left',padx=16)
         offline=getattr(session,'offline',False)
         mode='OFFLINE LIBRARY' if offline else ('DEMO · NO ROBOT' if getattr(session,'demo',False) else ('SIMULATION' if session.sim else 'HARDWARE · '+session.interface))
-        tk.Label(header,text=mode,bg='#e0eee9',fg=ACCENT,padx=12,pady=8,font=(family,9,'bold')).pack(side='right')
-        ttk.Label(outer,text='G1 EDU U4  /  Dex3 hand commands disabled',style='Muted.TLabel').pack(anchor='w',pady=(5,20))
+        tk.Label(header,text=mode,bg='#e0eee9',fg=ACCENT,padx=12,pady=8,font=(family,11,'bold')).pack(side='right')
+        ttk.Label(outer,text='G1 EDU U4  /  Dex3 fingers: no motion commands; damping on stop',style='Muted.TLabel').pack(anchor='w',pady=(5,20))
         status=ttk.Frame(outer,style='Card.TFrame',padding=(16,12));status.pack(fill='x',pady=(0,20))
         ttk.Label(status,textvariable=self.state_text,style='Card.TLabel',font=(family,11,'bold')).pack(side='left')
         ttk.Label(status,text='  /  ',style='Card.TLabel').pack(side='left')
         ttk.Label(status,textvariable=self.source_text,style='Card.TLabel').pack(side='left')
         ttk.Label(status,textvariable=self.queue_text,style='Caption.TLabel').pack(side='right')
-        content=ttk.Frame(outer,height=340);content.pack(fill='both',expand=True);content.grid_propagate(False)
+        self.stop_button=tk.Button(outer,text='EMERGENCY STOP  ·  Esc',bg='#bb2636',activebackground='#951b28',
+            fg='white',activeforeground='white',relief='flat',borderwidth=0,font=(family,18,'bold'),
+            command=self.stop,pady=15,takefocus=True)
+        self.stop_button.pack(side='bottom',fill='x',pady=(12,0))
+        content=ttk.Frame(outer,height=360);content.pack(fill='both',expand=True);content.grid_propagate(False)
         content.columnconfigure(0,weight=1);content.columnconfigure(1,weight=0);content.rowconfigure(0,weight=1)
         tabs=ttk.Notebook(content);tabs.grid(row=0,column=0,sticky='nsew',padx=(0,20));self.tabs=tabs
         clips=ttk.Frame(tabs,style='Card.TFrame',padding=18);keyboard=ttk.Frame(tabs,style='Card.TFrame',padding=18)
         tabs.add(clips,text='Motions');tabs.add(keyboard,text='Keyboard')
+        activity=ttk.Frame(tabs,style='Card.TFrame',padding=12);tabs.add(activity,text='Live activity')
+        from tkinter.scrolledtext import ScrolledText
+        self.activity=ScrolledText(activity,font=(family,11),bg=CARD,fg=TEXT,relief='flat',wrap='word',height=8,state='disabled')
+        self.activity.pack(fill='both',expand=True)
         toolbar=ttk.Frame(clips,style='Card.TFrame');toolbar.pack(fill='x',pady=(0,14))
         self.import_button=ttk.Button(toolbar,text='+ Import Kimodo',style='Accent.TButton',command=self.open_import);self.import_button.pack(side='left')
         self.load_button=ttk.Button(toolbar,text='Load library',command=self.load_library);self.load_button.pack(side='left',padx=8)
@@ -125,15 +138,16 @@ class Panel:
         self.start_button=ttk.Button(side,text='2  Feet down / start',style='Accent.TButton',command=self.start_grounded);self.start_button.pack(fill='x',pady=(10,0))
         ttk.Label(side,text='Setup actuates and holds the body.\nWait for checks, then lower feet.',style='Caption.TLabel').pack(anchor='w',pady=16)
         spacer=ttk.Frame(side,style='Card.TFrame');spacer.pack(fill='both',expand=True)
-        tk.Button(side,text='STOP    Esc',bg='#c73e48',activebackground='#ac2833',fg='white',activeforeground='white',
-                  relief='flat',borderwidth=0,font=(family,12,'bold'),command=self.stop,padx=16,pady=12,takefocus=True).pack(fill='x')
-        ttk.Label(side,text='Latched damping.\nGantry must support the robot.',style='Caption.TLabel').pack(anchor='w',pady=(10,0))
+        ttk.Label(side,text='Emergency stop requests damping\nfor body + both hands.\nKeep the robot supported.',style='Caption.TLabel').pack(anchor='w',pady=(10,0))
         progress=ttk.Frame(outer);progress.pack(fill='x',pady=(18,0))
         self.progress=ttk.Progressbar(progress,maximum=100);self.progress.pack(fill='x')
         ttk.Label(progress,textvariable=self.progress_text,style='Muted.TLabel',wraplength=990).pack(anchor='w',pady=(6,0))
         ttk.Label(outer,textvariable=self.notice,wraplength=990,foreground=ACCENT).pack(fill='x',pady=(10,12))
         footer=ttk.Frame(outer);footer.pack(fill='x')
         self.logs_button=ttk.Button(footer,text='Session files',command=self.open_logs);self.logs_button.pack(side='left')
+        self.limits_button=ttk.Button(footer,text='Acceptance limits',command=self.open_limits);self.limits_button.pack(side='left',padx=8)
+        self.limits_text=tk.StringVar();self.update_limits_text()
+        ttk.Label(footer,textvariable=self.limits_text,style='Muted.TLabel').pack(side='left',padx=8)
         ttk.Button(footer,text='Close',command=self.close).pack(side='right')
         root.bind_class('SonicSafetyKeys','<KeyPress>',self.key_down)
         root.bind_class('SonicSafetyKeys','<KeyRelease>',self.key_up)
@@ -143,6 +157,25 @@ class Panel:
         key_priority(root)
         root.bind('<FocusOut>',self.focus_out);root.protocol('WM_DELETE_WINDOW',self.close)
         self.update_buttons(None);root.after(50,self.tick)
+
+    def update_limits_text(self):
+        self.limits_text.set(f"Reference ≤{self.limits['reference_speed']:g} rad/s · travel ≤{self.limits['root_displacement']:g} m")
+
+    def open_limits(self):
+        if not self.can_edit_library() or self.import_dialog or self.limits_dialog:return
+        from .limits_dialog import LimitsDialog
+        def done():self.limits_dialog=None;self.update_buttons(self.session.status)
+        self.limits_dialog=LimitsDialog(self.root,self.limits,self.apply_limits,done)
+        self.update_buttons(self.session.status)
+
+    def apply_limits(self,values):
+        if not self.can_edit_library() or self.import_dialog:raise RuntimeError('Limits are locked during setup/control or import.')
+        values=save_limits(self.limits_path,values)
+        if values!=self.limits:
+            self.limits=values;self.session.acceptance_limits=dict(values);self.library_valid=False
+            self.queue.clear();self.waiting_clip=None;self.update_limits_text()
+            self.notice.set('Limits saved. Reload the motion library to validate it with these values before setup.')
+        self.update_buttons(self.session.status)
 
     def refresh_library(self):
         self.listbox.delete(0,'end')
@@ -154,14 +187,14 @@ class Panel:
         return not (self.session.process or getattr(self.session,'armed',False) or self.session.stopped or self.library_busy)
 
     def open_import(self):
-        if not self.can_edit_library() or self.import_dialog:return
+        if not self.can_edit_library() or self.import_dialog or self.limits_dialog:return
         from .import_dialog import ImportDialog
         def done():self.import_dialog=None;self.update_buttons(self.session.status)
-        self.import_dialog=ImportDialog(self.root,done,self.load_library)
+        self.import_dialog=ImportDialog(self.root,done,self.load_library,dict(self.limits))
         self.update_buttons(self.session.status)
 
     def load_library(self,folder=None):
-        if not self.can_edit_library() or self.import_dialog:return
+        if not self.can_edit_library() or self.import_dialog or self.limits_dialog:return
         from tkinter import filedialog
         folder=folder or filedialog.askdirectory(parent=self.root,title='SONIC motion library')
         if not folder:return
@@ -178,7 +211,7 @@ class Panel:
                 directory=Path(tempfile.mkdtemp(prefix='session-',dir=runs));directory.chmod(0o700)
                 model=(load_model(Path(__file__).resolve().parents[2]/'GR00T-WholeBodyControl') if getattr(self.session,'demo',False)
                        else json.loads((self.session.build/'guard-model.json').read_text()))
-                catalog=stage_library(idle,folder,directory/'motions',model)
+                catalog=stage_library(idle,folder,directory/'motions',model,self.limits)
                 events.put((catalog,directory,None))
             except Exception as e:events.put((None,None,str(e)))
         threading.Thread(target=worker,daemon=True).start()
@@ -188,7 +221,7 @@ class Panel:
             self.library_busy=False
             if error:self.notice.set('Library rejected: '+error)
             else:
-                self.catalog=catalog;self.session.directory=directory
+                self.library_valid=True;self.catalog=catalog;self.session.directory=directory
                 if getattr(self.session,'demo',False):self.session.catalog=catalog
                 self.refresh_library();self.notice.set('Library loaded and snapshotted. '+('Offline only; launch simulation separately to test SONIC.' if getattr(self.session,'offline',False) else 'Review setup before arming.'))
             self.update_buttons(self.session.status)
@@ -204,12 +237,14 @@ class Panel:
         except Exception as e:self.notice.set(str(e));return False
 
     def arm(self):
-        if not self.can_edit_library() or self.import_dialog or getattr(self.session,'offline',False):return
+        if not self.library_valid or not self.can_edit_library() or self.import_dialog or self.limits_dialog or getattr(self.session,'offline',False):return
         if not getattr(self.session,'demo',False) and not messagebox.askokcancel('ARM starts motor control',
             'After model loading, ARM releases Unitree control and ramps to your idle pose.\n\n'
             'Confirm: gantry support, clear workspace and hands, physical stop operator, and successful simulation validation.'):
             return
-        try:self.session.arm();self.notice.set('Initializing. First TensorRT engine builds may take several minutes.');self.update_buttons(self.session.status)
+        try:
+            self.session.arm();self.setup_started=time.monotonic();self.tabs.select(2)
+            self.notice.set('Setup running. Live activity shows model loading and robot checks.');self.update_buttons(self.session.status)
         except Exception as e:self.notice.set('Launch failed: '+str(e))
 
     def start_grounded(self):
@@ -222,7 +257,7 @@ class Panel:
         self.keys.clear();self.send('grounded_start')
 
     def enable_keyboard(self):
-        self.keys.clear();self.idle_requested=True
+        self.blocked_keys.update(self.keys);self.keys.clear();self.idle_requested=True
         self.send('planner')
 
     def request_idle(self):
@@ -242,19 +277,20 @@ class Panel:
     def play_all(self):self.enqueue([m['index'] for m in self.catalog[1:]])
     def clear_queue(self):self.queue.clear();self.notice.set('Queue cleared. The current clip will finish and hold.')
     def stop(self):
-        self.queue.clear();self.keys.clear();self.session.stop();self.state_text.set('STOP LATCHED');self.notice.set('STOP LATCHED — damping requested. Keep the robot supported.');self.update_buttons(self.session.status)
+        self.queue.clear();self.keys.clear();self.session.stop();self.state_text.set('STOP LATCHED');self.notice.set('Body + hands damping requested. Keep supported; verify the robot response. No automatic restart.' if self.session.process or getattr(self.session,'demo',False) else 'Stop latched. Controller is not running; no robot commands sent. Use the physical stop if needed.');self.update_buttons(self.session.status)
 
     def key_down(self,event):
         key=event.keysym.lower()
         if key=='escape':self.stop();return 'break'
         if key in self.release_jobs:self.root.after_cancel(self.release_jobs.pop(key))
+        if key in self.blocked_keys:return 'break'
         self.keys.add(key)
         if key in ('space','w','a','s','d'):return 'break' # Space must not activate the focused ARM button.
 
     def key_up(self,event):
         key=event.keysym.lower()
         def release():
-            self.release_jobs.pop(key,None);self.keys.discard(key)
+            self.release_jobs.pop(key,None);self.keys.discard(key);self.blocked_keys.discard(key)
             if key in ('space','w','a','s','d'):self.request_idle()
         if key not in self.release_jobs:self.release_jobs[key]=self.root.after(25,release)
         if key in ('space','w','a','s','d'):return 'break'
@@ -267,16 +303,26 @@ class Panel:
         armed=bool(self.session.process) or getattr(self.session,'armed',False)
         ready=bool(s and s['state']==2 and not s['planner'] and not s['playing'] and not self.queue and self.waiting_clip is None and not self.session.pending and not self.session.stopped)
         def enable(widget,yes):widget.configure(state='normal' if yes else 'disabled')
-        editable=self.can_edit_library() and self.import_dialog is None
+        editable=self.can_edit_library() and self.import_dialog is None and self.limits_dialog is None
+        enable(self.limits_button,editable)
         enable(self.import_button,editable);enable(self.load_button,editable)
-        enable(self.arm_button,editable and not getattr(self.session,'offline',False))
+        enable(self.arm_button,editable and self.library_valid and not getattr(self.session,'offline',False))
         enable(self.start_button,bool(s and s['state']==1 and s.get('setup_ready',False) and not self.session.stopped and not self.session.pending))
         for widget in [self.play_button,self.all_button,self.planner_button,*self.presets]:enable(widget,ready)
         enable(self.clear_button,bool(self.queue));enable(self.logs_button,not getattr(self.session,'demo',False))
 
+    def update_activity(self):
+        if time.monotonic()-self.last_activity_read<.25:return
+        self.last_activity_read=time.monotonic()
+        lines=self.session.read_activity() if hasattr(self.session,'read_activity') else []
+        if lines:
+            self.activity_lines=(self.activity_lines+lines)[-200:]
+            self.activity.configure(state='normal');self.activity.delete('1.0','end')
+            self.activity.insert('end','\n'.join(self.activity_lines));self.activity.see('end');self.activity.configure(state='disabled')
+
     def tick(self):
         try:
-            self.session.heartbeat();s=self.session.poll()
+            self.session.heartbeat();s=self.session.poll();self.update_activity()
             if self.session.process and self.session.process.poll() is not None:
                 self.session.stop();self.state_text.set('PROCESS EXITED');self.notice.set('Support robot / physical stop. Inspect controller.log.')
             elif s:
@@ -287,6 +333,14 @@ class Panel:
                 self.motion_text.set('Planner' if s['planner'] else item['name'][:25])
                 self.progress['value']=0 if s['planner'] else 100*s['frame']/max(1,item['frames']-1)
                 self.progress_text.set('Planner active • hold Space + direction to move' if s['planner'] else f'{item["name"]}  ·  frame {s["frame"]+1} / {item["frames"]}  ·  '+('playing' if s['playing'] else 'active reference hold'))
+                if s['state']<2:
+                    self.source_text.set('Setup · joint pose hold' if s['state']==1 else 'Setup · pose initialization')
+                    self.progress['value']=100 if s.get('setup_ready') else 0
+                    self.progress_text.set(s.get('detail') or 'Waiting for fresh, settled joint readings. Keep the gantry supporting the robot.')
+                elif s['planner']:
+                    self.source_text.set('Keyboard · hold Space + WASD')
+                else:
+                    self.source_text.set(('Playing · ' if s['playing'] else 'Holding · ')+item['name'][:34])
                 if s['fault']:self.notice.set('DAMPING LATCHED: '+s['reason'])
                 elif s['result']!='ok' and s['result']!='ready':self.notice.set(s['result'])
                 if not self.session.stopped and not self.session.pending:
@@ -302,7 +356,13 @@ class Panel:
                     elif self.queue and not s['playing']:
                         index=self.queue.pop(0)
                         if self.session.command('motion',index):self.waiting_clip=index
-            elif self.session.process:self.state_text.set('LOADING MODELS')
+            elif self.session.process:
+                self.state_text.set('SETUP RUNNING');self.source_text.set('Loading SONIC')
+                elapsed=int(time.monotonic()-(self.setup_started or time.monotonic()))
+                self.progress_text.set(f'{getattr(self.session,"setup_phase","Starting controller")} · {elapsed}s elapsed. See Live activity.')
+                if self.session.stopped:
+                    self.state_text.set('STOP REQUESTED')
+                    self.notice.set('Setup cancelled. No damping acknowledgement yet; use physical stop if needed.')
             self.queue_text.set(f'{len(self.queue)} remaining')
             self.update_buttons(s)
         except Exception as e:
@@ -310,7 +370,7 @@ class Panel:
         self.root.after(50,self.tick)
 
     def close(self):
-        if self.import_dialog or self.library_busy:
+        if self.import_dialog or self.library_busy or self.limits_dialog:
             self.notice.set('Finish importing/loading before closing.');return
         if self.session.process:
             self.stop()
@@ -328,14 +388,18 @@ def main():
     p.add_argument('--motions',type=Path,help='Folder of SONIC CSV motion directories')
     p.add_argument('--interface',help='LOCAL Ethernet interface; lo for simulation')
     p.add_argument('--sim',action='store_true')
+    p.add_argument('--limits',type=Path,help='Motion acceptance JSON; defaults to saved app settings')
     args=p.parse_args()
+    limits=load_limits(args.limits)
     if args.demo or args.library:
         catalog=[dict(index=i,name=name,frames=frames) for i,(name,frames) in enumerate([
             ('Standing reference',50),('Small wave · demo',150),('Arm raise · demo',200),('Return to neutral · demo',100),('Gesture · demo',175)])]
         if args.library:catalog=[dict(index=0,name='Idle reference',frames=50)]
         session=DemoSession(catalog);session.offline=args.library
+        session.acceptance_limits=limits;session.limits_path=args.limits or DEFAULT_PATH
         root=tk.Tk();Panel(root,session,catalog);root.mainloop();return
-    if not all((args.idle,args.motions,args.interface)):p.error('--idle, --motions and --interface are required unless --demo')
+    if not args.interface:p.error('--interface is required for the GPU controller')
+    if bool(args.idle)!=bool(args.motions):p.error('Supply both --idle and --motions, or choose them in the UI')
     from .motions import stage_library
     import fcntl,os
     lock=Path(f'/tmp/sonic-laptop-{os.getuid()}.lock').open('w')
@@ -343,8 +407,11 @@ def main():
     runs=Path('artifacts/laptop/sessions').resolve();runs.mkdir(parents=True,exist_ok=True)
     directory=Path(tempfile.mkdtemp(prefix='session-',dir=runs));directory.chmod(0o700)
     model=json.loads((args.build/'guard-model.json').read_text())
-    catalog=stage_library(args.idle,args.motions,directory/'motions',model)
+    catalog=(stage_library(args.idle,args.motions,directory/'motions',model,limits) if args.idle
+             else [dict(index=0,name='Load an idle reference',frames=50)])
     session=Session(args.build,directory,args.interface,args.sim,lock.fileno())
+    session.acceptance_limits=limits;session.limits_path=args.limits or DEFAULT_PATH
+    session.library_valid=bool(args.idle)
     root=tk.Tk();Panel(root,session,catalog);root.mainloop()
 
 if __name__=='__main__':main()
