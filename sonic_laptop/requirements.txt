@@ -1,0 +1,8 @@
+numpy>=1.26,<3
+cmake>=3.28,<4
+huggingface-hub>=0.26,<2
+mujoco>=3.2,<4
+pyzmq>=25,<28
+msgpack>=1,<2
+scipy>=1.11,<2
+lxml>=5,<7

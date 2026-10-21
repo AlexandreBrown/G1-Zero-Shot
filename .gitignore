@@ -218,3 +218,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Generated deployment bundles (source/model archives, not versioned).
+/artifacts/
+
+.venv_laptop/
