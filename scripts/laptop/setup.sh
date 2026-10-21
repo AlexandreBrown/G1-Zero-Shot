@@ -3,16 +3,16 @@
 set -euo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 UPSTREAM="${SONIC_UPSTREAM:-$(dirname "$ROOT")/GR00T-WholeBodyControl}"
-DEPS="$ROOT/artifacts/laptop/deps"
+DEPS="$ROOT/.runtime/sonic/deps"
 [[ $(uname -m) == x86_64 ]] || { echo 'This setup is for an x86_64 GPU laptop.'; exit 1; }
 nvidia-smi
-[[ -d "$UPSTREAM/gear_sonic_deploy" ]] || { echo "Clone NVlabs/GR00T-WholeBodyControl beside this repo first."; exit 1; }
 mkdir -p "$DEPS"
 sudo apt-get update
-sudo apt-get install -y build-essential cmake git-lfs curl python3-venv python3-tk \
+sudo apt-get install -y build-essential cmake git git-lfs curl python3-venv python3-tk \
  libyaml-cpp-dev libeigen3-dev libmsgpack-dev libmsgpack-cxx-dev libzmq3-dev cppzmq-dev \
  nlohmann-json3-dev zlib1g-dev libgtest-dev libboost-dev libgl1 libglfw3 fonts-dejavu-core
-git -C "$UPSTREAM" lfs pull --include="gear_sonic_deploy/g1/**" --exclude=""
+source "$ROOT/scripts/laptop/source.sh"
+ensure_sonic_source
 # Require a working CUDA 12 toolkit; do not replace a laptop's NVIDIA driver.
 CUDA_HOME="${CUDA_HOME:-/usr/local/cuda}"
 if [[ ! -f "$CUDA_HOME/include/cuda_runtime.h" ]]; then
@@ -39,7 +39,7 @@ fi
 /usr/bin/python3 -m venv "$ROOT/.venv_laptop"
 "$ROOT/.venv_laptop/bin/pip" install -r "$ROOT/sonic_laptop/requirements.txt"
 # Persist only paths; no conda/Mila/OpenSSL paths in this laptop environment.
-ENV_FILE="$ROOT/artifacts/laptop/env.sh"
+ENV_FILE="$ROOT/.runtime/sonic/env.sh"
 printf 'export SONIC_UPSTREAM=%q\nexport CUDA_HOME=%q\nexport CUDAToolkit_ROOT=%q\nexport TensorRT_ROOT=%q\nexport onnxruntime_ROOT=%q\n' \
  "$UPSTREAM" "$CUDA_HOME" "$CUDA_HOME" "$TensorRT_ROOT" "$onnxruntime_ROOT" > "$ENV_FILE"
 printf 'export LD_LIBRARY_PATH="%s/lib:%s/lib:%s/lib64:${LD_LIBRARY_PATH:-}"\n' "$TensorRT_ROOT" "$onnxruntime_ROOT" "$CUDA_HOME" >> "$ENV_FILE"
@@ -47,6 +47,11 @@ printf 'export PATH="%s/bin:$PATH"\nexport HAS_ROS2=0\n' "$ROOT/.venv_laptop" >>
 source "$ENV_FILE"
 (cd "$UPSTREAM" && python download_from_hf.py)
 cd "$ROOT"
-python -m sonic_laptop.prepare --upstream "$UPSTREAM" --output "$ROOT/artifacts/laptop/deploy"
+# Re-running setup refreshes generated source while preserving the previous build.
+if [[ -e "$ROOT/.runtime/sonic/deploy" ]]; then
+ mv "$ROOT/.runtime/sonic/deploy" "$ROOT/.runtime/sonic/deploy-backup-$(date +%Y%m%d-%H%M%S)-$$"
+fi
+python -m sonic_laptop.prepare --upstream "$UPSTREAM" --output "$ROOT/.runtime/sonic/deploy"
 bash "$ROOT/scripts/laptop/build.sh"
-echo 'LOCAL setup complete. Read README before starting simulation or hardware.'
+echo 'LOCAL setup complete. Persistent installation: .runtime/sonic/'
+echo 'Next: bash scripts/laptop/run.sh --interface YOUR_ETHERNET_INTERFACE' 

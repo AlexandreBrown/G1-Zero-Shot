@@ -3,7 +3,8 @@ import json
 import math
 from pathlib import Path
 
-DEFAULT_PATH=Path(__file__).resolve().parents[1]/'artifacts/laptop/acceptance-limits.json'
+from .paths import RUNTIME
+DEFAULT_PATH=RUNTIME/'acceptance-limits.json'
 # key: label, default, minimum, maximum
 FIELDS={
     'reference_speed':('Reference joint speed (rad/s)',4.0,0.1,8.0),

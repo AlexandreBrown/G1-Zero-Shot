@@ -3,7 +3,7 @@ from pathlib import Path
 from .import_kimodo import convert
 
 ROOT=Path(__file__).resolve().parents[1]
-DEFAULT_IDLE=ROOT/'artifacts/motions/kimodo/idle.csv'
+DEFAULT_IDLE=ROOT/'motions/kimodo/idle.csv'
 DEFAULT_IDLE_FPS=30  # Kimodo G1 export convention; CSV itself has no time metadata.
 
 

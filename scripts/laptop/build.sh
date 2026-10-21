@@ -2,8 +2,9 @@
 # LOCAL. Builds only the isolated guarded tree, never the stock upstream controller.
 set -euo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
-source "$ROOT/artifacts/laptop/env.sh"
-DEPLOY="$ROOT/artifacts/laptop/deploy"
+source "$ROOT/scripts/laptop/runtime.sh"
+require_sonic_environment
+DEPLOY="$ROOT/.runtime/sonic/deploy"
 [[ $(cat "$DEPLOY/GUARDED_BUILD") == sonic-laptop-v3 ]]
 cmake -S "$DEPLOY" -B "$DEPLOY/build" -DCMAKE_BUILD_TYPE=Release \
  -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \

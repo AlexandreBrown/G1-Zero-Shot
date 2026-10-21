@@ -15,16 +15,10 @@ start with [MuJoCo](docs/laptop-advanced.md#mujoco).
 
 ### 1. Install dependencies — once
 
-The upstream repository must be beside this one. If you do not have it yet:
-
-```bash
-# LOCAL
-cd ~/Documents/g1_zero
-git clone https://github.com/NVlabs/GR00T-WholeBodyControl.git
-git -C GR00T-WholeBodyControl checkout 45c03facbf848e0c743091b7d9c17952096ff908
-```
-
-Install dependencies, download the pretrained models and build SONIC:
+Run setup **on each GPU laptop after cloning this repository**. It downloads the
+supported upstream source, TensorRT, ONNX Runtime and pretrained SONIC models,
+creates the Python environment and builds the controller. No artifact archive
+needs to be copied or pushed to Git.
 
 ```bash
 # LOCAL
@@ -32,6 +26,11 @@ cd ~/Documents/g1_zero/G1-Zero-Shot
 export CUDA_HOME=/usr/local/cuda
 bash scripts/laptop/setup.sh
 ```
+
+Setup generates `.runtime/sonic/env.sh` locally. This is a **persistent installation**,
+not a temporary artifact; keep `.runtime/` on that laptop. It is excluded from Git
+because its paths and compiled files are machine-specific. `run.sh` uses it only
+after setup has finished.
 
 Already installed an older version? [Rebuild instructions](docs/laptop-advanced.md#rebuild).
 
@@ -52,7 +51,7 @@ Opening the app does not actuate the robot.
 1. Optional: open **Acceptance limits**, edit the motion checks, then apply.
 2. Use **Import Kimodo** for generated G1 CSV files. Enter their source FPS
    (**30** for your six-second, 180-frame export) and choose a new output folder.
-3. The app automatically loads `artifacts/motions/kimodo/idle.csv` as the idle
+3. The app automatically loads `motions/kimodo/idle.csv` as the idle
    reference (30 FPS). Click **Load library** to add your SONIC motion folder.
    Use **Idle: default → Choose custom SONIC idle** only to override it.
 
@@ -115,8 +114,19 @@ bash scripts/laptop/demo.sh
 bash scripts/laptop/library.sh
 ```
 
-Actual motion importing also needs the upstream checkout from step 1.
+The UI setup also fetches the supported upstream source and robot assets for importing.
 
 [MuJoCo / rebuild / limits](docs/laptop-advanced.md) ·
 [Safety behavior](docs/sonic-laptop-safety.md) ·
 [Validation results](docs/validation-2026-10-21.md)
+
+## What belongs in Git?
+
+- **`motions/`**: all motion files and preview videos, including `.csv` and `.mp4`.
+- **`.runtime/sonic/`**: downloaded dependencies, generated environment, build,
+  local settings and sessions. Persistent on this laptop, excluded from Git.
+- **`.venv_laptop/`, `.venv_ui/`**: generated Python environments, excluded from Git.
+- **`artifacts/`**: disposable reports, screenshots and optional offline-transfer
+  archives. Not required to clone or install the project; excluded from Git.
+
+The optional Orin source/model tar is for offline transfer, not Git or laptop setup.

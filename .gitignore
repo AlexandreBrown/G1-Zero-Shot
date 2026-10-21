@@ -222,3 +222,27 @@ __marimo__/
 .venv_laptop/
 
 .venv_ui/
+
+# Disposable reports and offline-transfer archives. Motion assets live in motions/.
+/artifacts/
+
+# Persistent machine-local SONIC installation and sessions; recreated by setup.
+/.runtime/
+
+# Generated model weights, engines and deployment archives (not motion assets).
+*.tar
+*.tar.gz
+*.tgz
+*.tar.zst
+*.onnx
+*.engine
+*.plan
+*.trt
+*.safetensors
+*.pt
+*.pth
+
+# All source motions and their previews belong in version control.
+!/motions/
+!/motions/**/
+!/motions/**/*

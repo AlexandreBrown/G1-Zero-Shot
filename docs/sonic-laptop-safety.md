@@ -2,7 +2,7 @@
 
 This is commissioning code, not a validated safety controller. It reuses NVIDIA's
 pretrained SONIC encoder, decoder, planner and Unitree DDS transport. It modifies
-an isolated deployment copy under `artifacts/laptop/deploy`; the upstream checkout
+an isolated deployment copy under `.runtime/sonic/deploy`; the upstream checkout
 is untouched. GPU engines must be built on the laptop that will run inference.
 No Mila or Orin service is needed. Hand publishers are initialized for damping on a latched stop; no finger motion commands are published.
 

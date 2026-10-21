@@ -28,15 +28,22 @@ initial pose until it receives the first body command.
 
 ## Rebuild
 
+If upgrading from the old `artifacts/laptop/` layout, run `bash scripts/laptop/setup.sh`
+once to create the new installation. Do not copy an old `env.sh` between PCs.
+Keep the old directory until the new build works; it is not deleted automatically.
+To reuse an existing compatible TensorRT download, set `TensorRT_ROOT` to its
+extracted folder before setup.
+
+
 Do this with the controller stopped and the real robot supported. The current
 controller requires `sonic-laptop-v3`; older versions are rejected.
 
 ```bash
 # LOCAL
 cd ~/Documents/g1_zero/G1-Zero-Shot
-source artifacts/laptop/env.sh
-mv artifacts/laptop/deploy "artifacts/laptop/deploy-backup-$(date +%Y%m%d-%H%M%S)"
-python -m sonic_laptop.prepare --upstream ../GR00T-WholeBodyControl --output artifacts/laptop/deploy
+source .runtime/sonic/env.sh
+mv .runtime/sonic/deploy ".runtime/sonic/deploy-backup-$(date +%Y%m%d-%H%M%S)"
+python -m sonic_laptop.prepare --upstream ../GR00T-WholeBodyControl --output .runtime/sonic/deploy
 bash scripts/laptop/build.sh
 ```
 
@@ -58,7 +65,7 @@ locked. Each validated session saves a separate `acceptance-limits.json` snapsho
 | Root tilt / `root_tilt` | 0.20 rad | 0.01–0.50 rad |
 | Minimum hand envelope clearance / `hand_clearance` | 0.025 m | 0.025–0.20 m |
 
-The default profile is `artifacts/laptop/acceptance-limits.json`. If absent, built-in
+The default profile is `.runtime/sonic/acceptance-limits.json`. If absent, built-in
 defaults apply. You can edit this JSON or use a separate `--limits` file:
 
 ```json
@@ -91,7 +98,8 @@ limit alone does not resolve its hand-envelope overlap.
 ## Setup notes
 
 - The supported upstream commit is `45c03facbf848e0c743091b7d9c17952096ff908`.
-  The preparation step checks source hashes and leaves upstream code untouched.
+  Setup fetches this revision when upstream is absent. An existing checkout is
+  checked without overwriting it. Preparation checks source hashes.
 - GPU setup requires the CUDA **development toolkit**, not just `nvidia-smi`.
   It installs TensorRT 10.13.3.9; set `TensorRT_ROOT` to reuse an existing compatible
   installation. Allow space for the approximately 7 GB archive and extraction.
@@ -101,7 +109,7 @@ limit alone does not resolve its hand-envelope overlap.
   Ensure the robot's controller handover procedure is appropriate and no competing
   body/hand command publisher is running. No Orin SSH is required.
 - Session logs, PID, staged references and acceptance limits are under
-  `artifacts/laptop/sessions/`. **Live activity** shows controller output in the UI.
+  `.runtime/sonic/sessions/`. **Live activity** shows controller output in the UI.
 - Offline previews use Ubuntu Tk for readable fonts. They cannot arm hardware;
   the demo's example motions are placeholders, not deployable clips.
 

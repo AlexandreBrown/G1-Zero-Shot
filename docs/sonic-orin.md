@@ -38,6 +38,9 @@ LOCAL, before switching networks:
 bash ~/Documents/g1_zero/G1-Zero-Shot/scripts/robot/prepare_bundle.sh
 ```
 
+This archive is optional for offline transfer. Do not commit it to Git; laptop
+setup downloads its own dependencies and pretrained models.
+
 The archive is created under `artifacts/orin/` with a SHA-256 checksum and
 upstream commit ID. It includes source, example references, ONNX weights, and
 licenses, but is not a complete offline installer: ARM64 dependencies depend on

@@ -7,6 +7,7 @@ import time
 import tkinter as tk
 from tkinter import ttk, messagebox
 from .session import Session
+from .paths import DEPLOY,SESSIONS
 from .limits import DEFAULTS, DEFAULT_PATH, load as load_limits, save as save_limits
 
 BG='#f4f6f8'; CARD='#ffffff'; TEXT='#172b3a'; MUTED='#475b6b'; ACCENT='#087f6b'
@@ -226,7 +227,7 @@ class Panel:
             try:
                 from .model import load_model
                 from .motions import stage_library
-                runs=Path('artifacts/laptop/sessions').resolve();runs.mkdir(parents=True,exist_ok=True)
+                runs=SESSIONS;runs.mkdir(parents=True,exist_ok=True)
                 directory=Path(tempfile.mkdtemp(prefix='session-',dir=runs));directory.chmod(0o700)
                 model=(load_model(Path(__file__).resolve().parents[2]/'GR00T-WholeBodyControl') if getattr(self.session,'demo',False)
                        else json.loads((self.session.build/'guard-model.json').read_text()))
@@ -406,7 +407,7 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--library',action='store_true',help='Offline library/import workspace; cannot arm a robot')
     p.add_argument('--demo',action='store_true',help='Offline UI demo: no GPU, DDS or robot commands')
-    p.add_argument('--build',type=Path,default=Path('artifacts/laptop/deploy'))
+    p.add_argument('--build',type=Path,default=DEPLOY)
     p.add_argument('--idle',type=Path,help='Override bundled Kimodo idle with a stationary SONIC directory')
     p.add_argument('--motions',type=Path,help='Folder of SONIC CSV motion directories')
     p.add_argument('--interface',help='LOCAL Ethernet interface; lo for simulation')
@@ -430,7 +431,7 @@ def main():
     import fcntl,os
     lock=Path(f'/tmp/sonic-laptop-{os.getuid()}.lock').open('w')
     fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
-    runs=Path('artifacts/laptop/sessions').resolve();runs.mkdir(parents=True,exist_ok=True)
+    runs=SESSIONS;runs.mkdir(parents=True,exist_ok=True)
     directory=Path(tempfile.mkdtemp(prefix='session-',dir=runs));directory.chmod(0o700)
     model=json.loads((args.build/'guard-model.json').read_text())
     catalog=[dict(index=0,name='Default idle',frames=50)]
