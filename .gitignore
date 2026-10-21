@@ -219,14 +219,6 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Generated deployment bundles (source/model archives, not versioned).
-/artifacts/*
-!/artifacts/motions/
-/artifacts/motions/*
-!/artifacts/motions/kimodo/
-/artifacts/motions/kimodo/*
-!/artifacts/motions/kimodo/idle.csv
-
 .venv_laptop/
 
 .venv_ui/
