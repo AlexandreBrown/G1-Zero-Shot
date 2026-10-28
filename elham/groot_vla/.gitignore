@@ -1,0 +1,13 @@
+# Everything heavy or machine-specific is rebuilt by setup.sh
+.venv/
+.python/
+.cache/
+.tmux/
+deps/
+checkpoints/
+GR00T-WholeBodyControl/
+Isaac-GR00T/
+logs/
+videos/
+__pycache__/
+*.pkl

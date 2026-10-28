@@ -17,6 +17,7 @@ driven from the deploy laptop over Ethernet.
 | [docs/CHECKLIST.md](docs/CHECKLIST.md) | Printable checklist for the day: room, bring-up, per trial, aborts, after a fall |
 | [docs/MOTIONS.md](docs/MOTIONS.md) | Which motions in which order, the simulation evidence, the expected standing lean per motion |
 | [docs/HARDWARE_NOTES.md](docs/HARDWARE_NOTES.md) | Every hardware fact used here, with its source |
+| [groot_vla/README.md](groot_vla/README.md) | GR00T N1.7 VLA ("grab the bottle") on top of SONIC, from NVIDIA's VLA inference tutorial: setup, sim, real robot |
 
 ## Results so far (2026-10-21, released SONIC weights, robot on a gantry)
 

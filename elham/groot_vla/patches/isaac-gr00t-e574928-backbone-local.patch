@@ -1,0 +1,57 @@
+diff --git a/gr00t/model/gr00t_n1d7/processing_gr00t_n1d7.py b/gr00t/model/gr00t_n1d7/processing_gr00t_n1d7.py
+index 10a35c6..01a2963 100644
+--- a/gr00t/model/gr00t_n1d7/processing_gr00t_n1d7.py
++++ b/gr00t/model/gr00t_n1d7/processing_gr00t_n1d7.py
+@@ -126,6 +126,9 @@ def build_processor(model_name: str, transformers_loading_kwargs: dict) -> Qwen3
+             "Qwen3VLProcessor is not available. "
+             "Please upgrade transformers: pip install transformers>=4.52.0"
+         )
++    # groot_vla local patch: load the backbone tokenizer/processor from a local snapshot. With a
++    # hub id, transformers 4.57.3 queries the hub (mistral-regex check) even when offline.
++    model_name = os.environ.get("GR00T_BACKBONE_LOCAL_DIR", model_name)
+     return Qwen3VLProcessor.from_pretrained(model_name, **transformers_loading_kwargs)
+ 
+ 
+diff --git a/gr00t/model/modules/qwen3_backbone.py b/gr00t/model/modules/qwen3_backbone.py
+index 4aba746..850aaba 100644
+--- a/gr00t/model/modules/qwen3_backbone.py
++++ b/gr00t/model/modules/qwen3_backbone.py
+@@ -14,8 +14,10 @@
+ # limitations under the License.
+ 
+ import logging
++import os
+ 
+ import torch
++from transformers import AutoConfig
+ from transformers.feature_extraction_utils import BatchFeature
+ 
+ 
+@@ -148,11 +150,22 @@ class Qwen3Backbone(torch.nn.Module):
+         if load_bf16:
+             extra_kwargs["torch_dtype"] = torch.bfloat16
+ 
+-        self.model = Qwen3VLForConditionalGeneration.from_pretrained(
+-            model_name,
+-            **extra_kwargs,
+-            **transformers_loading_kwargs,
+-        ).eval()
++        # groot_vla local patch: a finetuned GR00T checkpoint already stores every backbone
++        # weight, so build the backbone from its config instead of downloading ~4.5 GB of
++        # Cosmos-Reason2 weights that the checkpoint load overwrites anyway.
++        if os.environ.get("GR00T_BACKBONE_FROM_CONFIG") == "1":
++            backbone_config = AutoConfig.from_pretrained(
++                os.environ.get("GR00T_BACKBONE_LOCAL_DIR", model_name), **transformers_loading_kwargs
++            )
++            self.model = Qwen3VLForConditionalGeneration._from_config(
++                backbone_config, **extra_kwargs
++            ).eval()
++        else:
++            self.model = Qwen3VLForConditionalGeneration.from_pretrained(
++                model_name,
++                **extra_kwargs,
++                **transformers_loading_kwargs,
++            ).eval()
+ 
+         # needed since we don't use these layers. Also saves compute
+         while len(self.model.language_model.layers) > select_layer:
