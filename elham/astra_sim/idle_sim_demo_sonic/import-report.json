@@ -1,0 +1,25 @@
+{
+  "acceptance_limits": {
+    "reference_speed": 4.0,
+    "velocity_mismatch": 1.0,
+    "root_displacement": 0.15,
+    "root_tilt": 0.2,
+    "hand_clearance": 0.025
+  },
+  "source": "elham/astra_sim/idle_sim_demo/idle_apose.csv",
+  "source_sha256": "04bd77293a2261601f0fd220aaf09309a90a951d39c3d79538b574d8a5d0a48f",
+  "source_fps": 30.0,
+  "source_frames": 120,
+  "target_fps": 50,
+  "target_frames": 200,
+  "source_duration_seconds": 3.966666666666667,
+  "output_duration_seconds": 3.98,
+  "convention": "Kimodo default G1 MuJoCo CSV: z-up, x-forward, wxyz, raw joint DOFs",
+  "body_indexes": [
+    0
+  ],
+  "encoder_mode": 0,
+  "commissioning_checks_passed": true,
+  "commissioning_error": null,
+  "notes": "Root-only body data is for SONIC joint-based encoder mode 0. No retargeting, clipping, standing transitions or endpoint dwell was added. Idle matching and playlist checks still run when opening the control panel."
+}

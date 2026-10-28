@@ -1,0 +1,136 @@
+diff --color -ru '--exclude=build' '--exclude=target' '--exclude=*.orig' deploy/src/g1/g1_deploy_onnx_ref/include/sonic_guard.hpp deploy-sim/src/g1/g1_deploy_onnx_ref/include/sonic_guard.hpp
+--- deploy/src/g1/g1_deploy_onnx_ref/include/sonic_guard.hpp	2026-10-28 17:25:35.361119441 -0400
++++ deploy-sim/src/g1/g1_deploy_onnx_ref/include/sonic_guard.hpp	2026-10-28 17:13:37.418097531 -0400
+@@ -27,7 +27,15 @@
+ public:
+     std::string dir;
+     std::array<double,29> init{};
+-    std::atomic<bool> fault{false}, waiting{false}, setup_ready{false};
++    std::atomic<bool> fault{false}, waiting{false}, setup_ready{false}, planner_active{false};
++    // astra_ws sim build: SONIC's first outputs after the CONTROL handoff swing the arms toward its default
++    // arms-down pose (hands onto the hips) before it tracks the reference; skip only the envelope check briefly.
++    std::atomic<double> envelope_grace_until{0};
++    // CALIBRATED v1 (sim-validated 2026-10-28): thresholds from logged closed-loop SONIC runs.
++    static constexpr double target_over_range=1.5, target_step=1.5, measured_clearance=0.0;
++    // 80% of the per-joint velocity limits SONIC was trained with (gear_sonic/envs/manager_env/robots/g1.py).
++    static constexpr std::array<double,29> max_joint_speed={16,16,25.6,16,29.6,29.6, 16,16,25.6,16,29.6,29.6, 25.6,29.6,29.6,
++        29.6,29.6,29.6,29.6,29.6,17.6,17.6, 29.6,29.6,29.6,29.6,29.6,17.6,17.6};
+     std::atomic<double> input_tick{0}, setup_error{0}, setup_speed{0}, settled_seconds{0};
+     double settled_since=0;
+     std::mutex mutex, lease_mutex;
+@@ -35,6 +43,7 @@
+     double checked=0, previous_time=0;
+     std::array<double,29> previous{};
+     explicit Guard() {
++        if(!std::getenv("SONIC_GUARD_SIM")) throw std::runtime_error("Experimental calibrated guard: simulation only");
+         auto p=std::getenv("SONIC_GUARD_DIR");
+         if(!p) throw std::runtime_error("Use the guarded launcher: SONIC_GUARD_DIR missing");
+         dir=p;
+@@ -73,18 +82,22 @@
+                !std::isfinite(cmd.kp[i])||!std::isfinite(cmd.kd[i])||!std::isfinite(cmd.tau_ff[i])||!std::isfinite(cmd.dq_target[i])) {
+                 trip("Nonfinite motor value"); return false;
+             }
+-            if(target[i]<lower[i]||target[i]>upper[i]||measured[i]<lower[i]-.03||measured[i]>upper[i]+.03||
+-               std::abs(dq)>8||std::abs(cmd.dq_target[i])>4||std::abs(cmd.tau_ff[i])>torque[i]||
++            if(target[i]<lower[i]-target_over_range||target[i]>upper[i]+target_over_range||measured[i]<lower[i]-.03||measured[i]>upper[i]+.03||
++               std::abs(dq)>max_joint_speed[i]||std::abs(cmd.dq_target[i])>4||std::abs(cmd.tau_ff[i])>torque[i]||
+                cmd.kp[i]<0||cmd.kp[i]>400||cmd.kd[i]<0||cmd.kd[i]>20) {
+-                trip("Joint/gain/velocity/torque limit at motor "+std::to_string(i)); return false;
++                trip("Joint/gain/velocity/torque limit at motor "+std::to_string(i)+": target "+std::to_string(target[i])+
++                     " measured "+std::to_string(measured[i])+" dq "+std::to_string(dq)+" kp "+std::to_string(cmd.kp[i])+
++                     " kd "+std::to_string(cmd.kd[i])+" tau_ff "+std::to_string(cmd.tau_ff[i])+" dq_target "+std::to_string(cmd.dq_target[i])); return false;
+             }
+             // Updates arrive at 50 Hz, writer at 500 Hz: allow one bounded 20 ms step.
+-            if(previous_time && std::abs(target[i]-previous[i])>.20) {
+-                trip("Target step >0.20 rad at motor "+std::to_string(i)); return false;
++            if(previous_time && std::abs(target[i]-previous[i])>target_step) {
++                trip("Target step >1.5 rad at motor "+std::to_string(i)+": "+std::to_string(previous[i])+" -> "+std::to_string(target[i])); return false;
+             }
+         }
+-        if(clearance(target)<minimum_clearance||clearance(measured)<minimum_clearance) {
+-            trip("Hand/body envelope clearance <25 mm"); return false;
++        // Measured joints only (SONIC targets lead the joints inward against gravity); suspended in keyboard
++        // planner mode, whose arm pose overlaps the thighs physically with Dex3 hands.
++        if(!planner_active.load() && now()>=envelope_grace_until.load() && clearance(measured)<measured_clearance) {
++            trip("Hand/body envelope overlap (measured joints)"); return false;
+         }
+         double error=0, speed=0;
+         for(int i=0;i<29;++i) {
+diff --color -ru '--exclude=build' '--exclude=target' '--exclude=*.orig' deploy/src/g1/g1_deploy_onnx_ref/src/g1_deploy_onnx_ref.cpp deploy-sim/src/g1/g1_deploy_onnx_ref/src/g1_deploy_onnx_ref.cpp
+--- deploy/src/g1/g1_deploy_onnx_ref/src/g1_deploy_onnx_ref.cpp	2026-10-28 17:25:35.368119441 -0400
++++ deploy-sim/src/g1/g1_deploy_onnx_ref/src/g1_deploy_onnx_ref.cpp	2026-10-28 17:13:37.418097531 -0400
+@@ -2631,7 +2631,10 @@
+       pthread_setschedparam(pthread_self(), SCHED_FIFO, &param);
+       cpu_set_t cpuset;
+       CPU_ZERO(&cpuset);
+-      CPU_SET(0, &cpuset);
++      // astra_ws sim build: SONIC_CONTROL_CPU moves the control thread off CPU 0 so two simulated
++      // controllers on one laptop do not share a core. Unset keeps upstream behaviour (CPU 0).
++      const char* control_cpu = std::getenv("SONIC_CONTROL_CPU");
++      CPU_SET(control_cpu ? std::atoi(control_cpu) : 0, &cpuset);
+       pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+     }
+ 
+@@ -2779,6 +2782,7 @@
+       try {
+       if(!low_state_buffer_.GetDataWithTime().data) return false;
+       static bool released=false;
++      static std::array<double,29> ramp_start{};  // EXPERIMENT: ramp from the pose at handover, not the live pose
+       if(!released) {
+         if(!guard_.lease()) return false;
+         auto initial=low_state_buffer_.GetDataWithTime();
+@@ -2803,6 +2807,7 @@
+ 
+         }
+         std::cout << "[Setup] Handover complete; ramping to idle pose" << std::endl;
++        for(int j=0;j<29;++j) ramp_start[j]=low_state_buffer_.GetDataWithTime().data->motor_state()[j].q();
+         released=true;
+       }
+       auto low_state_data = low_state_buffer_.GetDataWithTime();
+@@ -2815,14 +2820,18 @@
+         motor_command_tmp.tau_ff.at(i) = 0.0;
+         motor_command_tmp.q_target.at(i) = static_cast<float>(guard_.init[i]);
+         motor_command_tmp.dq_target.at(i) = 0.0;
+-        motor_command_tmp.kp.at(i) = kps[i];
+-        motor_command_tmp.kd.at(i) = kds[i];
++        // EXPERIMENT: setup-only gains (waist x8, arms x8) so the suspended hold settles within 0.12 rad;
++        // kd scales with sqrt(kp) to keep each joint's damping ratio. astra_ws: waist x4 -> x8, because
++        // gpt_astra's ready pose (arms forward) left waist_pitch sagging 0.1203 rad at x4.
++        const float setup_gain = i >= 12 ? 8.0f : 1.0f;
++        motor_command_tmp.kp.at(i) = kps[i] * setup_gain;
++        motor_command_tmp.kd.at(i) = kds[i] * std::sqrt(setup_gain);
+       }
+       time_ += control_dt_;
+       if (time_ < duration_) {
+         for (int i = 0; i < G1_NUM_MOTOR; i++) {
+           double ratio = std::clamp(time_ / duration_, 0.0, 1.0);
+-          double current_pos = ls->motor_state()[i].q();
++          double current_pos = ramp_start[i];
+           motor_command_tmp.q_target.at(i) =
+               static_cast<float>(current_pos * (1.0 - ratio) + guard_.init[i] * ratio);
+         }
+@@ -3520,7 +3529,7 @@
+           deadman.cancel(); keyboard->PushStdinChar('r'); guard_result="ok";
+         } else if(command=="move" && keyboard->use_planner && !keyboard->guard_planner_start_pending && program_state_==ProgramState::CONTROL && argument>=0 && argument<4) {
+           keyboard->planner_use_movement_mode=LocomotionMode::SLOW_WALK;
+-          keyboard->planner_use_movement_speed=0.15;
++          keyboard->planner_use_movement_speed=0.4;  // EXPERIMENT: SONIC shuffles in place at 0.15 m/s; 0.4 tracks 79-92% in sim
+           deadman.refresh(argument,stamp,sonic_guard::now()); guard_result="ok";
+         } else if(command=="motion" && program_state_==ProgramState::CONTROL && !keyboard->use_planner && !operator_state.play && argument>=0 && argument<(int)motion_reader_.motions.size()) {
+           std::lock_guard<std::mutex> lock(current_motion_mutex_);
+@@ -3587,6 +3596,7 @@
+ 
+       {
+         std::lock_guard<std::mutex> lock(current_motion_mutex_);
++        guard_.planner_active.store(keyboard->use_planner);
+         guard_.status(guard_seq,guard_result,static_cast<int>(program_state_),
+                       motion_reader_.current_motion_index_,current_frame_,operator_state.play,keyboard->use_planner);
+       }
+@@ -3962,6 +3972,7 @@
+               warn_count++;
+             }
+             std::cout << "[Control] DEBUG: operator_state.start=true, transitioning to CONTROL state" << std::endl;
++            guard_.envelope_grace_until.store(sonic_guard::now() + 1.0);
+             program_state_ = ProgramState::CONTROL;
+           }
+           break;

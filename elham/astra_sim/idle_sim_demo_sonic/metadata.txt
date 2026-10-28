@@ -1,0 +1,6 @@
+Metadata for: idle_sim_demo_sonic
+
+Body part indexes:
+[0]
+
+Total timesteps: 200
