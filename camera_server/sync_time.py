@@ -14,6 +14,57 @@ import sys
 import tempfile
 import time
 
+import time_sync_agent
+
+PUBLIC_TIME_SERVERS = ('ntp.ubuntu.com', 'time.cloudflare.com')
+
+
+def laptop_synchronized():
+    status = subprocess.run(['timedatectl', 'show', '-p', 'NTPSynchronized', '--value'],
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+    return status.stdout.strip() == 'yes'
+
+
+def discover_time_servers():
+    # Some networks block public NTP but provide it on their DNS servers.
+    servers = []
+    try:
+        result = subprocess.run(['resolvectl', 'dns'], stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, text=True, check=False, timeout=5)
+        for word in result.stdout.split():
+            try:
+                address = str(ipaddress.ip_address(word))
+            except ValueError:
+                continue
+            if address not in servers:
+                servers.append(address)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    return servers[:8] + list(PUBLIC_TIME_SERVERS)
+
+
+def ensure_laptop_time(servers=None):
+    if laptop_synchronized():
+        return
+    if not time_sync_agent.service_running():
+        raise RuntimeError('Laptop clock is not synchronized and systemd-timesyncd is not running. '
+                           'Enable a time service and connect to a network with NTP, then retry.')
+    candidates = servers or discover_time_servers()
+    print('Laptop clock is not synchronized. Looking for a reachable time server...', flush=True)
+    try:
+        sample = time_sync_agent.ntp_sample(candidates)
+    except RuntimeError as exc:
+        raise RuntimeError('No laptop time server responded. Connect the laptop to a network '
+                           'that allows NTP (UDP 123), then retry.') from exc
+    selected = sample['server']
+    configured = [selected] + [server for server in PUBLIC_TIME_SERVERS if server != selected]
+    print(f'Found {selected}. Configuring laptop time; sudo may ask for your password...', flush=True)
+    subprocess.run(['sudo', sys.executable, str(Path(__file__).with_name('time_sync_agent.py')),
+                    'install', *configured], check=True)
+    if not laptop_synchronized():
+        raise RuntimeError('Laptop time service did not synchronize. Retry before setting the G1 clock.')
+    print('Laptop time synchronized.', flush=True)
+
 
 class RobotClock:
     def __init__(self, host, user, change):
@@ -125,7 +176,7 @@ def main(argv=None):
     parser.add_argument('--configure-ntp', action='store_true',
                         help='Configure automatic NTP on both computers (requires sudo and G1 internet)')
     parser.add_argument('--servers', nargs='+', metavar='NTP_SERVER',
-                        help='Time servers to use with --configure-ntp')
+                        help='Time servers to try when configuring NTP')
     args = parser.parse_args(argv)
     ipaddress.IPv4Address(args.robot)
     if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_-]*\$?', args.ssh_user):
@@ -138,15 +189,12 @@ def main(argv=None):
         if args.servers:
             forwarded.extend(['--servers', *args.servers])
         return _configure_ntp.main(forwarded)
-    if args.servers:
-        parser.error('--servers requires --configure-ntp')
+    if args.servers and any(not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9.:-]*', server) for server in args.servers):
+        raise RuntimeError('Invalid NTP server name.')
     if os.geteuid() == 0:
         raise RuntimeError('Run sync_time.py without sudo; sudo is only needed with --configure-ntp.')
     if not args.check:
-        status = subprocess.run(['timedatectl', 'show', '-p', 'NTPSynchronized', '--value'],
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
-        if status.stdout.strip() != 'yes':
-            raise RuntimeError('Laptop is not synchronized to a time server. Connect to a reachable time server first.')
+        ensure_laptop_time(args.servers)
     with RobotClock(args.robot, args.ssh_user, not args.check) as clock:
         rtt, offset = sample(clock)
         print(f'Before: G1 minus laptop {offset / 1e6:+.1f} ms '

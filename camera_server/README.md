@@ -29,7 +29,7 @@ After starting the G1, copy the synchronized laptop's time to it:
 python3 camera_server/sync_time.py
 ```
 
-The G1 needs only its network connection to the laptop, not internet. The laptop must have a synchronized clock. To check without changing the clock, add `--check`. Other laptops need accurate clocks of their own. This step is not needed just to view the camera.
+The G1 needs only its network connection to the laptop, not internet. If the laptop clock is not synchronized, the script looks for a time server and may ask for your laptop's sudo password; the laptop needs access to a time server. To check without changing the clock, add `--check`. Other laptops need accurate clocks of their own. This step is not needed just to view the camera.
 
 The scripts use `unitree@192.168.123.164` for SSH and sudo. For a different password, set `G1_SSH_PASSWORD`; add `--preserve-env=G1_SSH_PASSWORD` after `sudo` for scripts run with sudo.
 
