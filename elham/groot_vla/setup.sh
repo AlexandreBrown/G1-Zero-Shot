@@ -34,6 +34,14 @@ else
   git -C "$ISAAC_GROOT" apply --check --reverse "$PATCH" && echo "patch already applied"
 fi
 
+step "GR00T-WholeBodyControl local patch (VLA client hand mapping for Inspire-trained checkpoints)"
+PATCH=$GROOT_VLA_CODE/patches/gr00t-wbc-1fa5f7f-vla-hand-mapping.patch
+if git -C "$WBC" apply --check "$PATCH" 2>/dev/null; then
+  git -C "$WBC" apply "$PATCH"
+else
+  git -C "$WBC" apply --check --reverse "$PATCH" && echo "patch already applied"
+fi
+
 step "Python 3.10 venv (one env for policy server, VLA client and sim)"
 if [ ! -x "$PY" ]; then
   uv python install 3.10 || true

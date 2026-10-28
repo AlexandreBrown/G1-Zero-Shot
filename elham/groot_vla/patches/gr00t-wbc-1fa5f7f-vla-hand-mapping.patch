@@ -1,0 +1,105 @@
+diff --git a/gear_sonic/scripts/launch_inference.py b/gear_sonic/scripts/launch_inference.py
+index ef036ef..88d1634 100644
+--- a/gear_sonic/scripts/launch_inference.py
++++ b/gear_sonic/scripts/launch_inference.py
+@@ -138,6 +138,9 @@ class InferenceLaunchConfig:
+     action_horizon: int = 40
+     """Action horizon of the VLA policy."""
+ 
++    vla_extra_args: str = ""
++    """Extra arguments appended to run_vla_inference.py (e.g. "--hand-action-mode inspire_grip")."""
++
+     # Camera
+     camera_host: str = "localhost"
+     """Camera server host."""
+@@ -394,7 +397,8 @@ def main(config: InferenceLaunchConfig):
+         f"--action-publish-rate {config.action_publish_rate} "
+         f"--action-horizon {config.action_horizon} "
+         f"--camera-host {config.camera_host} "
+-        f"--camera-port {config.camera_port}"
++        f"--camera-port {config.camera_port} "
++        f"{config.vla_extra_args}"
+     )
+ 
+     print("Starting VLA inference (pane 1)...")
+diff --git a/gear_sonic/scripts/run_vla_inference.py b/gear_sonic/scripts/run_vla_inference.py
+index 7a5792d..a65de77 100644
+--- a/gear_sonic/scripts/run_vla_inference.py
++++ b/gear_sonic/scripts/run_vla_inference.py
+@@ -124,6 +124,15 @@ class InferenceConfig:
+     verbose_timing: bool = False
+     """Whether to always print timing info (not just when loop is slow)."""
+ 
++    # Hand interface of the checkpoint
++    hand_action_mode: str = "dex3_joints"
++    """dex3_joints: hand actions are Dex3 joint targets (radians), published as is.
++    inspire_grip: hand actions are Inspire FTP grip levels (channels 0-4, 0 = open, 1 = closed,
++    e.g. the cloudwalk grab-bottle checkpoints); their mean drives the Dex3 closed-hand preset."""
++
++    zero_hand_state: bool = False
++    """Send zeros as the hand state, for checkpoints whose training data recorded none."""
++
+ 
+ def print_green(x):
+     print(f"\033[92m{x}\033[0m")
+@@ -215,6 +224,7 @@ def prepare_observation_from_sensors(
+     robot_model,
+     language_prompt: str,
+     log_errors: bool = False,
++    zero_hand_state: bool = False,
+ ):
+     """Read sensors and prepare observation for the VLA policy.
+ 
+@@ -262,6 +272,9 @@ def prepare_observation_from_sensors(
+     }
+ 
+     observation = prepare_observation_for_eval(robot_model, observation)
++    if zero_hand_state:
++        observation["state"]["left_hand"] = np.zeros_like(observation["state"]["left_hand"])
++        observation["state"]["right_hand"] = np.zeros_like(observation["state"]["right_hand"])
+ 
+     # Projected gravity for Sonic latent embodiment
+     assert "base_quat" in state_msg, "base_quat not found in state_msg"
+@@ -355,6 +368,12 @@ def _inference_worker_loop(
+ # ---------------------------------------------------------------------------
+ 
+ 
++def inspire_grip_to_dex3(grip_action: np.ndarray, closed_q: np.ndarray) -> np.ndarray:
++    """Map Inspire FTP grip levels (channels 0-4, 0 = open, 1 = closed) onto a Dex3 closed preset."""
++    grip = float(np.clip(np.mean(grip_action[:5]), 0.0, 1.0))
++    return (grip * closed_q).astype(np.float32)
++
++
+ def _compute_closed_hand_joints(side: str) -> np.ndarray:
+     """Compute closed hand joint positions using G1GripperInverseKinematicsSolver."""
+     side_str = "left" if side.upper() == "L" else "right"
+@@ -603,6 +622,11 @@ def main(config: InferenceConfig):
+                 f"{'closed' if initial_pose_right_hand_closed else 'open'}"
+             )
+ 
++    assert config.hand_action_mode in ("dex3_joints", "inspire_grip"), config.hand_action_mode
++    dex3_closed_left = _compute_closed_hand_joints("L")
++    dex3_closed_right = _compute_closed_hand_joints("R")
++    print(f"Hand action mode: {config.hand_action_mode}, zero hand state: {config.zero_hand_state}")
++
+     # Mutable prompt container (single-writer from keyboard, single-reader from inference)
+     language_prompt_ref: list[str] = [config.prompt]
+     print(f"Starting the policy loop with language prompt: {language_prompt_ref[0]}")
+@@ -625,6 +649,7 @@ def main(config: InferenceConfig):
+                 robot_model=robot_model,
+                 language_prompt=language_prompt_ref[0],
+                 log_errors=True,
++                zero_hand_state=config.zero_hand_state,
+             ),
+             lambda obs: run_policy_inference_and_process(
+                 policy=n1_policy,
+@@ -719,6 +744,9 @@ def main(config: InferenceConfig):
+                         left_hand_joints = left_hand_joints[current_idx]
+                     if right_hand_joints.ndim == 2:
+                         right_hand_joints = right_hand_joints[current_idx]
++                    if config.hand_action_mode == "inspire_grip":
++                        left_hand_joints = inspire_grip_to_dex3(left_hand_joints, dex3_closed_left)
++                        right_hand_joints = inspire_grip_to_dex3(right_hand_joints, dex3_closed_right)
+ 
+                     frame_index = np.array([zmq_frame_counter], dtype=np.int64)
+                     zmq_frame_counter += 1

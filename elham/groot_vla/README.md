@@ -62,14 +62,43 @@ Local deviations from upstream:
 - Same files, `GR00T_BACKBONE_LOCAL_DIR` (set in `env.sh`): processor/config load from the local Cosmos-Reason2
   snapshot, because transformers 4.57.3 calls the HF API (mistral-regex check) for hub ids even with
   `HF_HUB_OFFLINE=1`. The server therefore runs without internet (needed at the robot).
+- `GR00T-WholeBodyControl/gear_sonic/scripts/run_vla_inference.py` (`patches/gr00t-wbc-*`): `--hand-action-mode
+  inspire_grip` and `--zero-hand-state`, on by default in `run.sh`. The cloudwalk checkpoints were trained on
+  Inspire FTP hands: their hand actions are grip levels (channels 0-4, 0 = open, 1 = closed, checked on an
+  episode) and the hand state was always zero (checkpoint `statistics.json`: min = max = 0). Passing them
+  through would send grip levels as Dex3 radians (right thumb_1 +1.0 where the Dex3 grasp needs -0.7). The
+  client now drives our Dex3 hands with `grip x` the upstream Dex3 closed preset and sends zero hand state.
 - Isaac-GR00T installed with `--no-deps` plus only the inference imports (no TensorRT wheels, deepspeed, wandb).
 
 ## Speed
 
-Measured in sim (2026-10-28): VLA chunk latency 0.56–1.6 s with the GPU capped at 45 W (power profile
-`power-saver`; default limit is 125 W). One chunk covers 0.8 s (40 actions at 50 Hz), so most of each
-chunk is already stale; the tutorial targets 2.5 Hz. Switch the power profile to Performance before
-real-robot use.
+Measured 2026-10-28, GPU capped at 45 W by the laptop BIOS (default 125 W; nvidia-powerd reports the
+BIOS disables Dynamic Boost). One chunk covers 0.8 s (40 actions at 50 Hz); the tutorial targets 2.5 Hz.
+
+| Setup | VLA latency |
+|---|---|
+| Sim run (GPU also renders MuJoCo) | mean 0.87 s, max 1.0 s |
+| Policy server alone (= real robot: camera on PC2, no sim) | mean 0.51 s, p50 0.44 s, p90 0.67 s, max 1.03 s |
+
+`tools/bench_vla_latency.py` reproduces the second row from a `record_sim_video.py capture` file.
+Under GPU saturation the sim loop can stall > 500 ms and trip SONIC's LowState watchdog; don't add
+GPU work (rendering, recording) during a sim run.
+
+## Other public UNITREE_G1_SONIC checkpoints (survey 2026-10-28)
+
+41 public GR00T checkpoints carry a `unitree_g1_sonic` head (checked in their statistics); NVIDIA releases
+none (NVlabs/GR00T-WholeBodyControl#171: collect and fine-tune your own). Almost all use the `release` SONIC.
+
+| Checkpoint | Data / result | Fit for our G1 |
+|---|---|---|
+| cloudwalk-research `...-371ep-v10-finetune` ckpt-30000 (in use) | real G1, grab bottle, 12/12 | yes with the Inspire->Dex3 grip mapping |
+| cloudwalk-research v2 (10/12), v5 (9/12), v6/v9 (8/12), v11 (untested) | same task and hands | same mapping; v10 is the best scored |
+| ETHRC-humanoid `groot-n1_7-red-cube-box-locomanip-10k` | real G1, walk + carry cube/box, Dex3 units, no closed-loop result | only Dex3-native candidate; gantry first |
+| wsagi `GR00T-N1.7-G1-SONIC-BonesSeed(-V2)`, `-LAFAN` | sim, prompt -> kick/walk/jump | sim demos only, not for the robot |
+| ETHRC-humanoid `gr00t-g1-sonic-3cam` | needs two wrist cameras | not usable |
+
+Real-robot SONIC datasets for fine-tuning our own: cloudwalk grab-bottle sets (Inspire, up to 502 ep),
+ETHRC-humanoid `red_cube_cardbox_all` (304 ep, Dex3 layout), NONHUMAN-RESEARCH children's table (533 ep, Dex1).
 
 ## Real robot
 

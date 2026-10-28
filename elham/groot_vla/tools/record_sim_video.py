@@ -84,10 +84,12 @@ def render(data_path: str, out: str, label: str) -> None:
     renderer = mujoco.Renderer(model, height=PANEL[1], width=PANEL[0])
     camera = mujoco.MjvCamera()
     camera.distance, camera.azimuth, camera.elevation = 2.4, 150.0, -12.0
+    # Hidden while incomplete: players retrying a moov-less mp4 have hung the desktop.
+    partial = Path(out).with_name("." + Path(out).name + ".part")
     encoder = subprocess.Popen(
         ["ffmpeg", "-loglevel", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24",
          "-s", f"{2 * PANEL[0]}x{PANEL[1] + 40}", "-r", str(fps), "-i", "-",
-         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "23", out],
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "23", "-f", "mp4", str(partial)],
         stdin=subprocess.PIPE,
     )
     for sample in samples:
@@ -106,7 +108,9 @@ def render(data_path: str, out: str, label: str) -> None:
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1, cv2.LINE_AA)
         encoder.stdin.write(frame.tobytes())
     encoder.stdin.close()
-    encoder.wait()
+    if encoder.wait() != 0:
+        raise RuntimeError(f"ffmpeg failed; incomplete video left at {partial}")
+    partial.replace(out)
     print(f"wrote {out}: {len(samples)} frames, {len(samples) / fps:.1f}s")
 
 

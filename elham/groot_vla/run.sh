@@ -50,5 +50,9 @@ if [[ $MODE == sim ]]; then
 else
   ARGS=(--camera-host 192.168.123.164)
 fi
+# The cloudwalk grab-bottle checkpoint was trained on Inspire hands (grip levels, no hand state);
+# map its grip onto our Dex3 hands. Set VLA_EXTRA_ARGS="" for a checkpoint trained on Dex3 joints.
+VLA_EXTRA_ARGS=${VLA_EXTRA_ARGS---hand-action-mode inspire_grip --zero-hand-state}
 exec "$GROOT_VLA/.venv/bin/python" gear_sonic/scripts/launch_inference.py "${ARGS[@]}" \
-  --no-data-exporter --policy-host 127.0.0.1 --policy-port 5550 --prompt "$PROMPT"
+  --no-data-exporter --policy-host 127.0.0.1 --policy-port 5550 --prompt "$PROMPT" \
+  --vla-extra-args="$VLA_EXTRA_ARGS"
