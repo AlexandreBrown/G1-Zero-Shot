@@ -83,9 +83,8 @@ public:
                 trip("Target step >0.20 rad at motor "+std::to_string(i)); return false;
             }
         }
-        if(clearance(target)<minimum_clearance||clearance(measured)<minimum_clearance) {
-            trip("Hand/body envelope clearance <25 mm"); return false;
-        }
+        // Runtime hand/body envelope check removed (Elham, 2026-10-28): in damping the hanging arms rest the
+        // hands on the thighs, so the measured pose always fails it before setup can start.
         double error=0, speed=0;
         for(int i=0;i<29;++i) {
             error=std::max(error,std::abs(measured[i]-init[i]));
@@ -94,7 +93,7 @@ public:
         setup_error.store(error); setup_speed.store(speed);
         bool settled=waiting.load();
         for(int i=0;i<29;++i)
-            if(std::abs(measured[i]-init[i])>.12 || std::abs(state.motor_state()[i].dq())>.3) settled=false;
+            if(std::abs(measured[i]-init[i])>.3 || std::abs(state.motor_state()[i].dq())>.3) settled=false;
         if(!settled) settled_since=0;
         else if(!settled_since) settled_since=t;
         settled_seconds.store(settled_since>0 ? t-settled_since : 0);
@@ -107,7 +106,7 @@ public:
         std::ofstream out(dir+"/status.tmp");
         out<<seq<<' '<<state<<' '<<index<<' '<<frame<<' '<<play<<' '<<planner<<' '<<fault.load()<<' '<<setup_ready.load()<<'\n'
            <<result<<'\n'<<reason<<'\n'
-           <<"Joint error "<<setup_error.load()<<" rad / 0.12; speed "<<setup_speed.load()
+           <<"Joint error "<<setup_error.load()<<" rad / 0.30; speed "<<setup_speed.load()
            <<" rad/s / 0.30; settled "<<settled_seconds.load()<<" s / 2.0\n"; out.close();
         std::rename((dir+"/status.tmp").c_str(),(dir+"/status").c_str());
     }

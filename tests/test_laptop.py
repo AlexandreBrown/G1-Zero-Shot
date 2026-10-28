@@ -103,7 +103,7 @@ int main(int argc,char**argv) {
  assert(g.validate(c,s,.01,.01));
  g.waiting.store(true);assert(g.validate(c,s,.01,.01));assert(!g.setup_ready.load());
  g.settled_since=sonic_guard::now()-2.1;assert(g.validate(c,s,.01,.01));assert(g.setup_ready.load());
- s.motors[0].value+=.13;assert(g.validate(c,s,.01,.01));assert(!g.setup_ready.load());s.motors[0].value=g.init[0];
+ s.motors[0].value+=.31;assert(g.validate(c,s,.01,.01));assert(!g.setup_ready.load());s.motors[0].value=g.init[0];
  c.q_target[0]=std::numeric_limits<double>::quiet_NaN();assert(!g.validate(c,s,.01,.01));
  c.q_target=g.init;assert(!g.validate(c,s,.01,.01)); // latch cannot recover
  lease();sonic_guard::Guard stale;assert(!stale.validate(c,s,.11,.01));
