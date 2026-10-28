@@ -1,8 +1,4 @@
-"""Generate a narrow, deterministic arm-tap vocabulary; validate with existing gates.
-
-These are kinematic commissioning references, NOT a proven balloon policy. The
-learned SONIC encoder/controller follows them; GPT only selects their names.
-"""
+"""Build and validate bounded SONIC motion references."""
 import json
 from pathlib import Path
 import numpy as np
@@ -10,7 +6,7 @@ from sonic_laptop.model import load_model
 from sonic_laptop.motions import read_clip, stage_library
 
 ROOT = Path(__file__).resolve().parents[1]
-RUNTIME = Path(__file__).resolve().parent / ".runtime"
+RUNTIME = Path(__file__).resolve().parent / "runs"
 
 
 def ready_pose(model):
@@ -38,37 +34,19 @@ def write_clip(path, q, model):
     read_clip(path, model)  # Reject limits, nonfinite values, clearance, speed, discontinuity.
 
 
-def generate_library(destination, model):
+def generate_standing_library(destination, model):
+    """Default for a task without an action generator: hold the ready pose."""
     destination = Path(destination)
-    if destination.exists():
-        raise ValueError(f"Refusing to overwrite library: {destination}")
-    destination.mkdir(parents=True)
-    ready = ready_pose(model)
-    write_clip(destination / "ready", np.tile(ready, (50, 1)), model)
-    descriptions = {}
-    for side in ("left", "right"):
-        for level, angle in (("small", .3), ("high", .6)):
-            name = f"tap_{side}_{level}"
-            peak = ready.copy()
-            peak[model["names"].index(f"{side}_shoulder_pitch_joint")] -= angle
-            # 0.5 s ready, 0.4 s upward stroke, 0.6 s return, 0.5 s ready.
-            def blend(a, b, count):
-                u = np.linspace(0, 1, count)[:, None]
-                return a + (b-a) * (10*u**3 - 15*u**4 + 6*u**5)
-            q = np.concatenate([np.tile(ready, (26, 1)), blend(ready, peak, 21)[1:],
-                                blend(peak, ready, 31)[1:], np.tile(ready, (26, 1))])
-            write_clip(destination / name, q, model)
-            descriptions[name] = (f"Robot {side} arm upward {level} tap from ready; shoulder pitch "
-                                  f"changes by {angle} rad, then returns. About {len(q)/50:.2f}s total; "
-                                  "0.5s initial dwell. Feet stay in place; no finger motion.")
-    (destination / "actions.json").write_text(json.dumps(descriptions, indent=2) + "\n")
+    destination.mkdir()
+    write_clip(destination / "ready", np.tile(ready_pose(model), (50, 1)), model)
+    (destination / "actions.json").write_text("{}\n")
     return destination
 
 
-def prepare_session(directory, upstream, library=None):
+def prepare_session(directory, upstream, library=None, generator=None):
     model = load_model(upstream)
     if library is None:
-        library = generate_library(directory / "generated", model)
+        library = (generator or generate_standing_library)(directory / "generated", model)
     library = Path(library)
     descriptions = json.loads((library / "actions.json").read_text())
     catalog = stage_library(library / "ready", library, directory / "motions", model)

@@ -29,7 +29,7 @@ int main(int argc,char** argv) {
     setenv("SONIC_GUARD_DIR",argv[1],1);
     Harness h;
     assert(h.motion_reader_.ReadFromCSV(std::string(argv[1])+"/motions"));
-    assert(h.motion_reader_.motions.size()==5);
+    assert(h.motion_reader_.motions.size()==4);
     assert(h.motion_reader_.motions[0]->name=="0000");
     h.current_motion_=h.motion_reader_.GetMotionShared(0);
     h.command("motion",1);h.tick();assert(!h.operator_state.play); // suspended

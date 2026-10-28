@@ -1,0 +1,6 @@
+Catch the red balloon moving in front of the robot. In simulation, a red sphere
+represents the balloon. Track it in the ego camera and choose a reach only when
+it is visible and within reach. Hold when unsure or when the target is not visible.
+The camera cannot see behind the robot; never assume that unseen space is clear.
+The available actions are bounded arm reaches with stationary feet; they do not
+close fingers or provide a guaranteed grasp.

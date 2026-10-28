@@ -11,18 +11,21 @@ import select
 import signal
 import subprocess
 import sys
-import tempfile
 import threading
 import time
+import uuid
+from datetime import datetime
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from sonic_laptop.paths import DEPLOY
 from sonic_laptop.session import Session
 from gpt_astra.camera import MockCamera, ZmqCamera
-from gpt_astra.motions import RUNTIME, generate_library, prepare_session
+from gpt_astra.motions import RUNTIME, generate_standing_library, prepare_session
 from gpt_astra.policy import Astra, FakePolicy
 from gpt_astra.preview import CameraPreview
+from gpt_astra.task_library import snapshot_task, task_directory, task_generator
+from sonic_laptop.session import atomic_write
 
 
 class MockSession(Session):
@@ -57,6 +60,7 @@ class Runner:
         self.session = self.camera = self.lock = self.events = self.simulator = self.sim_log = None
         self.preview = None
         self.camera_ready = False
+        self.observation_index = 0
         self.last_preview = 0
         self.state = {}
         self.support_confirmed = False
@@ -69,6 +73,13 @@ class Runner:
 
     def prepare(self):
         a = self.args
+        RUNTIME.mkdir(parents=True, exist_ok=True)
+        name = datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:8]
+        self.directory = RUNTIME / name
+        self.directory.mkdir(mode=0o700)
+        self.events = (self.directory / "events.jsonl").open("w")
+        print(f"Run folder: {self.directory}", flush=True)
+        a.task = snapshot_task(a.task_name, a.task, self.directory / "task")
         if a.policy == "astra" and not os.environ.get("OPENAI_API_KEY"):
             raise ValueError("Set OPENAI_API_KEY, or use --backend mock --policy fake for offline testing")
         if a.backend != "mock":
@@ -78,12 +89,8 @@ class Runner:
                 fcntl.flock(self.lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
                 raise RuntimeError("Another guarded SONIC session is running") from None
-        RUNTIME.mkdir(parents=True, exist_ok=True)
-        self.directory = Path(tempfile.mkdtemp(prefix="session-", dir=RUNTIME))
-        self.directory.chmod(0o700)
-        self.events = (self.directory / "events.jsonl").open("w")
         model, self.catalog, self.indexes, actions = prepare_session(
-            self.directory, a.upstream, a.library)
+            self.directory, a.upstream, a.library, task_generator(self.directory / "task"))
         if a.backend != "mock":
             if not (a.build / "guard-model.json").is_file() or not (a.build / "target/release/g1_deploy_onnx_ref").is_file():
                 raise ValueError("Run bash gpt_astra/setup.sh --gpu on the GPU laptop first")
@@ -104,15 +111,16 @@ class Runner:
             self.simulator = subprocess.Popen(
                 [str(python), str(Path(__file__).with_name("sim.py")),
                  "--upstream", str(a.upstream), "--idle", str(self.directory / "motions/0000"),
+                 "--task-dir", str(self.directory / "task"), "--run-dir", str(self.directory),
                  "--camera-port", str(a.camera_port)], cwd=a.upstream,
                 stdout=self.sim_log, stderr=subprocess.STDOUT, start_new_session=True)
         cls = MockSession if a.backend == "mock" else Session
         self.session = cls(a.build, self.directory, a.interface or "lo", a.backend == "sim",
                            self.lock.fileno() if self.lock else None)
-        print(f"Logs + latest camera image: {self.directory}", flush=True)
         self.log("prepared", backend=a.backend, policy=a.policy,
                  model=a.model if a.policy != "fake" else None,
-                 task=a.task, max_decisions=a.max_decisions, max_decision_age=a.max_decision_age)
+                 task_name=a.task_name, task=a.task, max_decisions=a.max_decisions,
+                 max_decision_age=a.max_decision_age)
 
     def pump(self, camera_required=False, tolerate_fault=False):
         if self.session and self.session.process:
@@ -217,6 +225,15 @@ class Runner:
 
     def ask_policy(self, preflight=False):
         frames = self.camera.latest()
+        self.observation_index += 1
+        frame_directory = self.directory / "frames"
+        frame_directory.mkdir(exist_ok=True)
+        frame_names = []
+        for i, frame in enumerate(frames):
+            name = f"{self.observation_index:04d}_{'preflight' if preflight else 'decision'}_{i}.jpg"
+            (frame_directory / name).write_bytes(frame.jpeg)
+            frame_names.append("frames/" + name)
+        self.log("observation", preflight=preflight, images=frame_names)
         observed = frames[-1].received
         state = {"preflight": preflight, "backend": self.args.backend, **self.state}
         state["previous_action"] = getattr(self, "previous_action", "hold")
@@ -274,6 +291,11 @@ class Runner:
             raise RuntimeError("Joint settling no longer passes after lowering; re-support and restart")
         self.send("grounded_start")
         self.wait_for(lambda: self.state.get("state") == 2, 5, camera_required=True)
+        if self.state.get("index") != 0 or self.state.get("playing"):
+            raise RuntimeError("Expected SONIC to hold the initial standing reference before GPT control")
+        self.log("standing_reference_active")
+        if self.args.backend == "sim":
+            atomic_write(self.directory / "task-start", "start\n")
         print("Loop active. Ctrl+C or q + ENTER requests latched damping; gantry must catch the robot.",
               flush=True)
         for _ in range(self.args.max_decisions):
@@ -331,7 +353,10 @@ class Runner:
                 pass  # Never force-kill a controller with an unsupported robot.
         if self.simulator and self.simulator.poll() is None:
             os.killpg(self.simulator.pid, signal.SIGTERM)
-            self.simulator.wait(timeout=5)
+            try:
+                self.simulator.wait(timeout=15)  # Let the simulator finalize the MP4 and CSV.
+            except subprocess.TimeoutExpired:
+                print("Simulator is still finalizing its recording; see simulator.log.", flush=True)
         if self.camera:
             self.camera.close()
         if self.preview:
@@ -351,7 +376,8 @@ def parse_args(argv=None):
                    help="astra: OpenAI API using the selected model; fake: offline mock only")
     p.add_argument("--model", default=os.environ.get("OPENAI_MODEL", "gpt-6-astra"),
                    help="OpenAI model ID; overrides OPENAI_MODEL (default: gpt-6-astra)")
-    p.add_argument("--task", default="Keep the balloon in the air by hitting it upward with your hands.")
+    p.add_argument("--task-name", default="catch_balloon", help="Task directory under gpt_astra/tasks")
+    p.add_argument("--task", help="Override the selected task's text prompt")
     p.add_argument("--interface", help="Robot: wired Ethernet interface. Simulation: lo.")
     p.add_argument("--camera-host", default="127.0.0.1")
     p.add_argument("--camera-port", type=int, default=5555)
@@ -400,7 +426,8 @@ def main(argv=None):
     args = parse_args(argv)
     if args.prepare_only:
         from sonic_laptop.model import load_model
-        generate_library(args.prepare_only, load_model(args.upstream))
+        generator = task_generator(task_directory(args.task_name)) or generate_standing_library
+        generator(args.prepare_only, load_model(args.upstream))
         print(f"Kinematic references validated at {args.prepare_only}; physical performance is untested.")
         return 0
     runner = Runner(args)

@@ -20,7 +20,8 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from gpt_astra.camera import Frame, Frames, MockCamera, ZmqCamera, jpeg_thumbnail
-from gpt_astra.motions import generate_library, prepare_session, ready_pose
+from gpt_astra.motions import prepare_session, ready_pose
+from gpt_astra.tasks.catch_balloon.motions import generate_library
 from gpt_astra.policy import Astra, Decision, validate_decision
 from gpt_astra.run import MockSession, Runner, decision_allowed, parse_args
 from sonic_laptop.model import load_model, clearance
@@ -44,7 +45,8 @@ class ApiFixture:
                 outer.requests.append(request)
                 time.sleep(outer.delay)
                 user = json.loads(request["input"][0]["content"][0]["text"])
-                action = "hold" if user["controller"]["preflight"] else "tap_left_small"
+                action = ("hold" if user["controller"]["preflight"] else
+                          next((name for name in user["available_actions"] if name not in ("hold", "stop")), "hold"))
                 reply = outer.reply or {"status": "completed", "output": [{"type": "message", "content": [{
                     "type": "output_text", "text": json.dumps({"action": action, "confidence": .95,
                                                                "reason": "fixture only"})}]}]}
@@ -163,8 +165,8 @@ class MotionTests(unittest.TestCase):
         directory = self.path / "session"
         directory.mkdir()
         _, catalog, indexes, actions = prepare_session(directory, UPSTREAM, self.library)
-        self.assertEqual(len(catalog), 5)
-        self.assertEqual(len(indexes), 4)
+        self.assertEqual(len(catalog), 4)
+        self.assertEqual(len(indexes), 3)
         self.assertEqual(set(actions), {"hold", "stop", *indexes})
         for name in indexes:
             arrays, q = read_clip(self.library / name, self.model)
@@ -172,7 +174,7 @@ class MotionTests(unittest.TestCase):
             self.assertTrue(np.allclose(q[:, :15], q[0, :15]))
             self.assertLess(np.max(np.abs(arrays["joint_vel"])), 4)
 
-    def test_independent_mujoco_fk_tap_moves_hand_upward(self):
+    def test_independent_mujoco_fk_reach_moves_hand_forward_and_upward(self):
         try:
             import mujoco
         except ImportError:
@@ -185,9 +187,10 @@ class MotionTests(unittest.TestCase):
             mujoco.mj_forward(model, data)
             return data.body(side + "_wrist_yaw_link").xpos.copy()
         for side in ("left", "right"):
-            _, q = read_clip(self.library / f"tap_{side}_high", self.model)
-            start, peak = position(q[0], side), position(q[45], side)
+            _, q = read_clip(self.library / f"reach_{side}", self.model)
+            start, peak = position(q[0], side), position(q[65], side)
             self.assertGreater(peak[2]-start[2], .10)
+            self.assertGreater(peak[0]-start[0], .08)
             self.assertGreater(min(clearance(self.model, pose) for pose in q), .025)
 
     def test_generated_clips_through_actual_cpp_reader_and_command_gate(self):
@@ -280,6 +283,12 @@ class IntegrationTests(unittest.TestCase):
                     labels = [e["event"] for e in events]
                     self.assertEqual(events[0]["model"], "gpt-6.1-sol")
                     self.assertLess(labels.index("preflight_response"), labels.index("suspended_checks_passed"))
+                    self.assertLess(labels.index("standing_reference_active"), labels.index("decision"))
+                    self.assertTrue((runner.directory / "task/task.txt").is_file())
+                    for event in events:
+                        if event["event"] == "observation":
+                            self.assertTrue(all((runner.directory / image).read_bytes().startswith(b"\xff\xd8")
+                                                for image in event["images"]))
                     acks = [e for e in events if e["event"] == "command_ack"]
                     self.assertEqual([e["command"] for e in acks], ["grounded_start", "motion"])
                     self.assertEqual(labels[-1], "finished")
