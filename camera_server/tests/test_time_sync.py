@@ -9,7 +9,7 @@ import unittest
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import sync_time
+import _configure_ntp as sync_time
 import time_sync_agent as agent
 
 

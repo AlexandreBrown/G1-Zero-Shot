@@ -104,7 +104,7 @@ def install(servers):
             return result
         time.sleep(2)
     raise RuntimeError(f'Time configuration saved, but synchronization has not converged: {result}. '
-                       'Run --check later; do not use timestamp-sensitive control yet.')
+                       'Run sync_time.py --configure-ntp --check later; do not use timestamp-sensitive control yet.')
 
 
 def main():

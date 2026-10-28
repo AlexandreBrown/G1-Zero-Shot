@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SSH-side clock protocol used by set_g1_clock.py."""
+"""SSH-side clock protocol used by sync_time.py."""
 
 import json
 import sys

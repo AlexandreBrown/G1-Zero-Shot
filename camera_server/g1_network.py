@@ -34,7 +34,7 @@ def refresh_time_sync(label, wait=15):
         return None
     try:
         if run('systemctl', 'is-active', 'systemd-timesyncd.service', check=False) != 'active':
-            print(f'{label}: time service is not active; run sync_time.py.', flush=True)
+            print(f'{label}: time service is not active; run sync_time.py --configure-ntp.', flush=True)
             return False
         run('systemctl', 'restart', 'systemd-timesyncd.service')
         deadline = time.monotonic() + wait

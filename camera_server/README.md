@@ -26,7 +26,7 @@ Connect the laptop and G1 to the robot router. **The camera server and viewer do
 After starting the G1, copy the synchronized laptop's time to it:
 
 ```bash
-python3 camera_server/set_g1_clock.py
+python3 camera_server/sync_time.py
 ```
 
 The G1 needs only its network connection to the laptop, not internet. The laptop must have a synchronized clock. To check without changing the clock, add `--check`. Other laptops need accurate clocks of their own. This step is not needed just to view the camera.
@@ -61,4 +61,4 @@ The laptop must stay connected. Other people can SSH into the G1 while it uses t
 sudo python3 camera_server/share_internet.py stop
 ```
 
-For automatic clock synchronization when both machines have internet, run `sudo python3 camera_server/sync_time.py` once. Its default servers include our school and public servers; use `--servers server1 server2` for a different network.
+For automatic clock synchronization when both machines have internet, run `sudo python3 camera_server/sync_time.py --configure-ntp` once. Its default servers include our school and public servers; add `--servers server1 server2` for a different network.
