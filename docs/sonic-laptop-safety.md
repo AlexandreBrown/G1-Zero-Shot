@@ -24,7 +24,8 @@ No Mila or Orin service is needed. Hand publishers are initialized for damping o
   frame. Do not reset heading, jump to frame zero, exit, or remove stiffness.
 - **Clear remaining queue:** finish the current clip, then hold its final frame.
 - **Keyboard:** one-way switch from reference hold to upstream planner. Space plus
-  W/S/A/D requests slow forward/back/left/right movement at 0.15 m/s. Release or
+  W/S/A/D requests slow forward/back/left/right movement at 0.4 m/s (SLOW_WALK; at
+  0.15 m/s SONIC stepped in place in MuJoCo while the planner moved 0.7 m). Release or
   focus loss requests IDLE, superseding a pending move. Key-release uses a 25 ms
   X11 autorepeat filter. Each timestamped movement request expires after 150 ms;
   the next input iteration forces planner IDLE without momentum decay. Stale
@@ -81,6 +82,31 @@ The limits below describe default reference checks and fixed runtime checks.
   It does not cover every link pair, accessories, obstacles or swept trajectories.
   It is not proof of collision freedom. Confirm it encloses your real hand/finger
   configuration and calibrate against U4 before hardware commissioning.
+
+### Simulation profile (`--sim` on `lo` only)
+
+The panel sets `SONIC_GUARD_SIM` only for simulation, and the guard then uses limits
+calibrated from closed-loop MuJoCo runs of the released SONIC policy (2026-10-28). With
+the hardware limits above the controller latches before SONIC can run. Hardware keeps
+every limit above unchanged.
+
+| Check | Hardware | Simulation | Peak in passing sim runs |
+| --- | --- | --- | --- |
+| Commanded target beyond joint range | 0 rad | 1.5 rad | 0.95 rad (waist pitch, at Start) |
+| Target step per publication | 0.20 rad | 1.5 rad | 0.9-1.0 rad (Start transient) |
+| Measured joint speed | 8 rad/s | 80% of SONIC's training limit per joint | 17 rad/s ankle balance correction |
+| Hand envelope | commanded and measured, >=25 mm | measured only, no overlap, paused in keyboard mode | 11.5 mm |
+| Setup hold | SONIC gains, ramp re-targets the live pose | arms x8, waist x4 gains, ramp from the hand-over pose | joint error 0.04 rad |
+
+Reasons: with SONIC's soft arm gains the suspended arms sag 0.12-0.2 rad into the
+envelope; SONIC's targets lead the joints inward against gravity; SONIC's own default
+arm pose is inside the envelope; its first command steps the knees past 0.2 rad. The
+simulation profile still latches on corrupt commands: one run commanded finite
+targets near 1e36 rad, which the range check catches at the first bad command.
+
+In keyboard planner mode SONIC's arm pose overlaps the thighs by 14-48 mm with the Dex3
+hand meshes, so expect hand-thigh contact on hardware. Keyboard moves request 0.4 m/s:
+at 0.15 m/s SONIC stepped in place while the planner reference moved 0.7 m.
 
 The conservative envelope rejects the stock default arm pose in local tests.
 Do not weaken it merely to make a clip run. Supply a validated standing reference

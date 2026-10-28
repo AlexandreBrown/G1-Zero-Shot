@@ -27,7 +27,12 @@ class Guard {
 public:
     std::string dir;
     std::array<double,29> init{};
-    std::atomic<bool> fault{false}, waiting{false}, setup_ready{false};
+    std::atomic<bool> fault{false}, waiting{false}, setup_ready{false}, planner_active{false};
+    // Simulation profile (SONIC_GUARD_SIM, set by the panel only for --sim on lo): limits calibrated from
+    // closed-loop MuJoCo runs of the released SONIC policy. Hardware keeps the original limits.
+    bool sim=false;
+    double target_over_range=0, target_step=.20;
+    std::array<double,29> max_joint_speed{};
     std::atomic<double> input_tick{0}, setup_error{0}, setup_speed{0}, settled_seconds{0};
     double settled_since=0;
     std::mutex mutex, lease_mutex;
@@ -42,7 +47,20 @@ public:
         for(auto& q:init) if(!(f>>q)||!std::isfinite(q)) throw std::runtime_error("Invalid init pose");
         for(int i=0;i<29;++i) if(init[i]<lower[i]||init[i]>upper[i]) throw std::runtime_error("Init limit violation");
         if(clearance(init)<minimum_clearance) throw std::runtime_error("Init hand clearance violation");
+        sim=std::getenv("SONIC_GUARD_SIM")!=nullptr;
+        max_joint_speed.fill(8);
+        if(sim) {
+            // SONIC's start-up and balance transients reach 0.9 rad target steps, targets 0.95 rad past the joint
+            // range and 17 rad/s at the ankles; corrupt or runaway commands are orders of magnitude larger.
+            target_over_range=1.5; target_step=1.5;
+            // 80% of the per-joint velocity limits SONIC was trained with (gear_sonic/envs/manager_env/robots/g1.py).
+            max_joint_speed={16,16,25.6,16,29.6,29.6, 16,16,25.6,16,29.6,29.6, 25.6,29.6,29.6,
+                             29.6,29.6,29.6,29.6,29.6,17.6,17.6, 29.6,29.6,29.6,29.6,29.6,17.6,17.6};
+        }
     }
+    // Setup-hold gain multiplier. SONIC's own gains let the arms sag 0.12-0.2 rad and the torso tip during the
+    // suspended hold, so in simulation arms and waist are stiffer until Start.
+    float setup_gain(int i) const { return !sim ? 1.0f : i>=15 ? 8.0f : i>=12 ? 4.0f : 1.0f; }
     void trip(const std::string& why) {
         std::lock_guard<std::mutex> lock(mutex);
         if(!fault.load()) { reason=why; fault.store(true); std::cerr<<"SONIC GUARD LATCHED: "<<why<<std::endl; }
@@ -73,18 +91,22 @@ public:
                !std::isfinite(cmd.kp[i])||!std::isfinite(cmd.kd[i])||!std::isfinite(cmd.tau_ff[i])||!std::isfinite(cmd.dq_target[i])) {
                 trip("Nonfinite motor value"); return false;
             }
-            if(target[i]<lower[i]||target[i]>upper[i]||measured[i]<lower[i]-.03||measured[i]>upper[i]+.03||
-               std::abs(dq)>8||std::abs(cmd.dq_target[i])>4||std::abs(cmd.tau_ff[i])>torque[i]||
+            if(target[i]<lower[i]-target_over_range||target[i]>upper[i]+target_over_range||
+               measured[i]<lower[i]-.03||measured[i]>upper[i]+.03||std::abs(dq)>max_joint_speed[i]||std::abs(cmd.dq_target[i])>4||std::abs(cmd.tau_ff[i])>torque[i]||
                cmd.kp[i]<0||cmd.kp[i]>400||cmd.kd[i]<0||cmd.kd[i]>20) {
-                trip("Joint/gain/velocity/torque limit at motor "+std::to_string(i)); return false;
+                trip("Joint/gain/velocity/torque limit at motor "+std::to_string(i)+": target "+std::to_string(target[i])+
+                     " measured "+std::to_string(measured[i])+" dq "+std::to_string(dq)); return false;
             }
             // Updates arrive at 50 Hz, writer at 500 Hz: allow one bounded 20 ms step.
-            if(previous_time && std::abs(target[i]-previous[i])>.20) {
-                trip("Target step >0.20 rad at motor "+std::to_string(i)); return false;
+            if(previous_time && std::abs(target[i]-previous[i])>target_step) {
+                trip(std::string("Target step >")+(sim ? "1.5" : "0.20")+" rad at motor "+std::to_string(i)); return false;
             }
         }
-        if(clearance(target)<minimum_clearance||clearance(measured)<minimum_clearance) {
-            trip("Hand/body envelope clearance <25 mm"); return false;
+        // In simulation: measured joints only (SONIC's targets lead the joints inward against gravity), no overlap
+        // allowed, paused in keyboard planner mode, whose arm pose overlaps the thighs physically with Dex3 hands.
+        if(sim ? !planner_active.load() && clearance(measured)<0
+               : clearance(target)<minimum_clearance||clearance(measured)<minimum_clearance) {
+            trip(sim ? "Hand/body envelope overlap (measured joints)" : "Hand/body envelope clearance <25 mm"); return false;
         }
         double error=0, speed=0;
         for(int i=0;i<29;++i) {

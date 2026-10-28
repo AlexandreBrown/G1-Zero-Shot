@@ -69,7 +69,7 @@ INPUT = r'''
           deadman.cancel(); keyboard->PushStdinChar('r'); guard_result="ok";
         } else if(command=="move" && keyboard->use_planner && !keyboard->guard_planner_start_pending && program_state_==ProgramState::CONTROL && argument>=0 && argument<4) {
           keyboard->planner_use_movement_mode=LocomotionMode::SLOW_WALK;
-          keyboard->planner_use_movement_speed=0.15;
+          keyboard->planner_use_movement_speed=0.4;
           deadman.refresh(argument,stamp,sonic_guard::now()); guard_result="ok";
         } else if(command=="motion" && program_state_==ProgramState::CONTROL && !keyboard->use_planner && !operator_state.play && argument>=0 && argument<(int)motion_reader_.motions.size()) {
           std::lock_guard<std::mutex> lock(current_motion_mutex_);
@@ -85,6 +85,7 @@ INPUT = r'''
       if(keyboard->use_planner) keyboard->PushStdinChar(deadman.active(sonic_guard::now()) ? "ws,."[deadman.direction] : 'r');
 '''
 STATUS = r'''
+      guard_.planner_active.store(keyboard->use_planner);
       {
         std::lock_guard<std::mutex> lock(current_motion_mutex_);
         guard_.status(guard_seq,guard_result,static_cast<int>(program_state_),
@@ -148,9 +149,15 @@ def patch(source, destination):
     release=release.replace('while (msc_->CheckMode(form, name), !name.empty()) {',
         'for (int attempt=0; ; ++attempt) {\n        if(!guard_.lease()) throw std::runtime_error("UI lease absent before release");\n        if(msc_->CheckMode(form,name)!=0) throw std::runtime_error("Cannot read robot mode");\n        if(name.empty()) break;\n        if(attempt>=3) throw std::runtime_error("Cannot release robot mode");')
     anchor='    bool InitControl() {'
-    s=replace_once(s,anchor,anchor+'\n      if(!low_state_buffer_.GetDataWithTime().data) return false;\n      static bool released=false;\n      if(!released) {\n        if(!guard_.lease()) return false;\n        auto initial=low_state_buffer_.GetDataWithTime();\n        MotorCommand check{};\n        for(int j=0;j<29;++j) check.q_target[j]=initial.data->motor_state()[j].q();\n        if(!guard_.validate(check,*initial.data,0,std::chrono::duration<double>(std::chrono::steady_clock::now()-initial.timestamp).count())) return false;\n        if(!std::getenv("SONIC_GUARD_SIM")) {\n'+release+'\n        }\n        released=true;\n      }')
+    s=replace_once(s,anchor,anchor+'\n      if(!low_state_buffer_.GetDataWithTime().data) return false;\n      static bool released=false;\n      static std::array<double,29> ramp_start{};\n      if(!released) {\n        if(!guard_.lease()) return false;\n        auto initial=low_state_buffer_.GetDataWithTime();\n        MotorCommand check{};\n        for(int j=0;j<29;++j) check.q_target[j]=initial.data->motor_state()[j].q();\n        if(!guard_.validate(check,*initial.data,0,std::chrono::duration<double>(std::chrono::steady_clock::now()-initial.timestamp).count())) return false;\n        if(!std::getenv("SONIC_GUARD_SIM")) {\n'+release+'\n        }\n        for(int j=0;j<29;++j) ramp_start[j]=low_state_buffer_.GetDataWithTime().data->motor_state()[j].q();\n        released=true;\n      }')
     a=s.index('    bool InitControl()'); b=s.index('    bool CheckSafety()',a)
     section=s[a:b].replace('default_angles[i]','guard_.init[i]')
+    # Simulation profile: ramp from the pose at hand-over (upstream re-reads the live pose, so a sagging joint drags
+    # its own target) with stiffer setup-only arm/waist gains; kd follows sqrt(gain) to keep the damping ratio.
+    section=replace_once(section,'double current_pos = ls->motor_state()[i].q();',
+        'double current_pos = guard_.sim ? ramp_start[i] : ls->motor_state()[i].q();')
+    section=replace_once(section,'motor_command_tmp.kp.at(i) = kps[i];','motor_command_tmp.kp.at(i) = kps[i] * guard_.setup_gain(i);')
+    section=replace_once(section,'motor_command_tmp.kd.at(i) = kds[i];','motor_command_tmp.kd.at(i) = kds[i] * std::sqrt(guard_.setup_gain(i));')
     section=section.replace('    bool InitControl() {','    bool InitControl() {\n      try {',1)
     end=section.rfind('      return true;\n    }')
     assert end>=0

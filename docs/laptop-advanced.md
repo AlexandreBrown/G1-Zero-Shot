@@ -7,24 +7,39 @@ The current bundled file fails validation and must be corrected or replaced befo
 Test the same idle reference, library and acceptance profile before hardware.
 Both terminals run on the **LOCAL GPU laptop**.
 
+`bash scripts/laptop/demo.sh` runs both terminals below with the `motions/sim_demo` idle
+and clips (regenerate them with `scripts/laptop/sim_demo_motions.py`). To test your own
+library, pass the same `--idle` to both terminals.
+
 ```bash
 # LOCAL — terminal 1; install simulator once if .venv_sim is missing
 cd ~/Documents/g1_zero/GR00T-WholeBodyControl
 bash install_scripts/install_mujoco_sim.sh
 source .venv_sim/bin/activate
-python ../G1-Zero-Shot/scripts/laptop/sim.py
+python ../G1-Zero-Shot/scripts/laptop/sim.py --idle /path/to/sonic_idle
 ```
 
 ```bash
 # LOCAL — terminal 2
 cd ~/Documents/g1_zero/G1-Zero-Shot
-bash scripts/laptop/run.sh --sim --interface lo --motions ~/motions
+bash scripts/laptop/run.sh --sim --interface lo --motions ~/motions --idle /path/to/sonic_idle
 ```
 
-In the panel, use **Suspended setup**, wait for checks, release simulator suspension
-with key **9**, then use **Feet down / start**. Test playback completion, keyboard
-release, focus loss, heartbeat loss and stop. The simulator wrapper holds your
-initial pose until it receives the first body command.
+In the panel, use **Suspended setup** and wait for checks. In the MuJoCo window press
+**7** once: the band sets the feet on the floor and still carries the weight, like a
+gantry. Use **Feet down / start**, then press **9** to release the band. Releasing it
+before start drops the robot onto setup PD gains it cannot stand on. Test playback
+completion, keyboard release, focus loss, heartbeat loss and stop. The simulator
+wrapper holds your initial pose 10 cm above the floor until it receives the first body
+command; the band then holds the robot there without lifting it.
+
+**Simulation guard profile:** in simulation the guard uses limits calibrated from closed-loop
+SONIC runs, and the setup hold uses stiffer arm/waist gains. Hardware keeps the original
+limits. See [Safety behavior](sonic-laptop-safety.md#simulation-profile---sim-on-lo-only).
+In MuJoCo, key **9** slackens the band in two stages (orientation hold over 1 s, then the
+weight over 2 s) and **7/8** move it at 0.1 m/s, like a gantry, so the start does not jolt the
+robot. The simulator also sets each joint's motor armature to the values SONIC was trained with.
+On a hot laptop the Python simulator can fall below real time; keep other GPU/CPU jobs closed.
 
 ## Rebuild
 
@@ -103,6 +118,8 @@ limit alone does not resolve its hand-envelope overlap.
 - GPU setup requires the CUDA **development toolkit**, not just `nvidia-smi`.
   It installs TensorRT 10.13.3.9; set `TensorRT_ROOT` to reuse an existing compatible
   installation. Allow space for the approximately 7 GB archive and extraction.
+  An apt install (`libnvinfer-dev` 10.13) works through a folder whose `include/` links the
+  `/usr/include/x86_64-linux-gnu/Nv*.h` headers and whose `lib` links `/usr/lib/x86_64-linux-gnu`.
 - For apt signature errors, fix the offending package source before rerunning;
   the setup does not bypass signature checks.
 - The hardware interface is the laptop's Ethernet name, not the robot IP.

@@ -75,6 +75,9 @@ class LaptopTests(unittest.TestCase):
         self.assertNotIn('dex3_hands_.writeOnce(',text)
         self.assertIn('current_motion_->timesteps - 1',text)
         self.assertIn('Setup failed: ',text)
+        self.assertIn('guard_.sim ? ramp_start[i]',text)
+        self.assertIn('kps[i] * guard_.setup_gain(i)',text)
+        self.assertIn('guard_.planner_active.store(keyboard->use_planner);',text)
         sdk=UPSTREAM/'gear_sonic_deploy/thirdparty/unitree_sdk2'
         subprocess.run(['g++','-std=c++17','-fsyntax-only','-x','c++','-I/usr/include/eigen3',
             '-I'+str(sdk/'include'),'-I'+str(sdk/'thirdparty/include'),
@@ -87,7 +90,7 @@ class LaptopTests(unittest.TestCase):
 #include "guard.hpp"
 #include <cassert>
 #include <limits>
-struct Motor {double value=0;double q() const{return value;}double dq() const{return 0;}};
+struct Motor {double value=0,speed=0;double q() const{return value;}double dq() const{return speed;}};
 struct State {std::array<Motor,29> motors;const auto& motor_state() const{return motors;}};
 struct Command {std::array<double,29> q_target{},dq_target{},kp{},kd{},tau_ff{};};
 int main(int argc,char**argv) {
@@ -113,6 +116,16 @@ int main(int argc,char**argv) {
  sonic_guard::Guard expired;assert(!expired.validate(c,s,.01,.01));
  lease();sonic_guard::Guard stalled;stalled.input_tick.store(sonic_guard::now()-.2);assert(!stalled.validate(c,s,.01,.01));
  lease();sonic_guard::Guard limit;c.q_target[0]=100;assert(!limit.validate(c,s,.01,.01));
+ assert(!limit.sim && limit.setup_gain(20)==1.0f);
+ // Simulation profile: SONIC's start-up transients pass, runaway or corrupt commands still latch.
+ setenv("SONIC_GUARD_SIM","1",1);c.q_target=g.init;
+ lease();sonic_guard::Guard sim;assert(sim.sim && sim.setup_gain(20)==8.0f && sim.setup_gain(13)==4.0f && sim.setup_gain(3)==1.0f);
+ assert(sim.validate(c,s,.01,.01));c.q_target[4]+=.9;assert(sim.validate(c,s,.01,.01));
+ s.motors[4].speed=20;assert(sim.validate(c,s,.01,.01));s.motors[4].speed=0;
+ c.q_target[4]+=1.6;assert(!sim.validate(c,s,.01,.01));c.q_target=g.init;
+ lease();sonic_guard::Guard runaway;assert(runaway.validate(c,s,.01,.01));s.motors[3].speed=17;assert(!runaway.validate(c,s,.01,.01));s.motors[3].speed=0;
+ lease();sonic_guard::Guard corrupt;assert(corrupt.validate(c,s,.01,.01));c.q_target[0]=1e30;assert(!corrupt.validate(c,s,.01,.01));
+ unsetenv("SONIC_GUARD_SIM");
 }
 '''
         (self.p/'test.cpp').write_text(source)

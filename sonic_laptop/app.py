@@ -132,7 +132,7 @@ class Panel:
         self.presets=[]
         self.planner_button=ttk.Button(keyboard,text='Enable keyboard control',style='Accent.TButton',command=self.enable_keyboard)
         self.planner_button.pack(anchor='w')
-        ttk.Label(keyboard,text='Slow-walk planner · 0.15 m/s request',style='Caption.TLabel').pack(anchor='w',pady=(8,18))
+        ttk.Label(keyboard,text='Slow-walk planner · 0.4 m/s request',style='Caption.TLabel').pack(anchor='w',pady=(8,18))
         pad=ttk.Frame(keyboard,style='Card.TFrame');pad.pack(pady=(0,12))
         for label,row,col in [('W',0,1),('A',1,0),('S',1,1),('D',1,2)]:
             tk.Label(pad,text=label,bg='#edf2f5',fg=TEXT,font=(family,16,'bold'),width=5,height=2).grid(row=row,column=col,padx=4,pady=4)

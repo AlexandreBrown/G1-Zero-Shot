@@ -47,7 +47,7 @@ int main(int argc,char** argv){
     for(int direction=0;direction<4;direction++){
         h.command("move",direction);h.tick();auto value=h.movement.GetDataWithTime().data;
         assert(value && value->locomotion_mode==static_cast<int>(LocomotionMode::SLOW_WALK));
-        assert(std::abs(value->movement_speed-.15)<1e-6);
+        assert(std::abs(value->movement_speed-.4)<1e-6);
         assert(value->movement_direction[direction<2 ? 0 : 1]*(direction%2 ? -1 : 1)>.99);
         h.command("idle");h.tick();value=h.movement.GetDataWithTime().data;
         assert(value->locomotion_mode==static_cast<int>(LocomotionMode::IDLE));

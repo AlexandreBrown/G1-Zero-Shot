@@ -97,6 +97,22 @@ profile, add `--limits /path/to/limits.json` to either command.
 Changing limits requires reloading the library. Runtime guards remain fixed.
 [Limits and defaults](docs/laptop-advanced.md#acceptance-limits).
 
+## Simulation demo: GPU laptop
+
+After setup, `demo.sh` opens the MuJoCo simulator and the real panel in simulation mode
+(interface `lo`), loaded with the `motions/sim_demo` idle and clips. Operate the simulated G1
+as in step 3. In the MuJoCo window, **7** sets the feet down (before start) and **9** releases the band (after start).
+It needs the upstream simulator environment once ([MuJoCo](docs/laptop-advanced.md#mujoco)).
+
+```bash
+# LOCAL — simulated robot, SONIC inference on this GPU; nothing is sent to hardware
+bash scripts/laptop/demo.sh
+```
+
+The demo idle is SONIC's stance with the arms opened to 0.7 rad shoulder roll, which passes the
+hand-clearance check. Its clips are simulation material, not validated for the robot.
+In simulation the guard uses a calibrated profile; hardware limits are unchanged ([details](docs/sonic-laptop-safety.md#simulation-profile---sim-on-lo-only)).
+
 ## Offline preview: CPU or GPU
 
 No robot, GPU driver or CUDA installation is needed. This is UI/import preview,
@@ -108,7 +124,8 @@ cd ~/Documents/g1_zero/G1-Zero-Shot
 bash scripts/laptop/setup_ui.sh
 
 # LOCAL — try setup, motion and keyboard screens using fake robot state
-bash scripts/laptop/demo.sh
+# (without GPU setup demo.sh opens this preview; with it, add --offline)
+bash scripts/laptop/demo.sh --offline
 
 # LOCAL — import and validate your actual motion files without robot control
 bash scripts/laptop/library.sh

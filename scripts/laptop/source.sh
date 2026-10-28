@@ -10,7 +10,9 @@ ensure_sonic_source() {
   echo "Incomplete upstream checkout at $UPSTREAM. Expected commit $revision; existing files were not changed." >&2
   return 1
  fi
- git -C "$UPSTREAM" lfs pull --include='gear_sonic_deploy/g1/**' --exclude=''
+ # Robot assets, the Unitree SDK/DDS libraries the controller links against, and the MuJoCo sim meshes.
+ git -C "$UPSTREAM" lfs pull --exclude='' \
+  --include='gear_sonic_deploy/g1/**,gear_sonic_deploy/thirdparty/unitree_sdk2/**,gear_sonic/data/robot_model/model_data/g1/**'
  # Fail before large downloads when an existing checkout isn't supported.
  /usr/bin/python3 - "$ROOT" "$UPSTREAM" <<'PY'
 import hashlib,json,sys
