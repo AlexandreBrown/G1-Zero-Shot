@@ -236,6 +236,11 @@ class Runner:
         self.log("observation", preflight=preflight, images=frame_names)
         observed = frames[-1].received
         state = {"preflight": preflight, "backend": self.args.backend, **self.state}
+        if not preflight:
+            # astra_ws: setup_ready/detail describe the suspended setup check against the ready pose;
+            # once SONIC balances on its own they stay false and GPT read them as "controller not ready".
+            state.pop("setup_ready", None)
+            state.pop("detail", None)
         state["previous_action"] = getattr(self, "previous_action", "hold")
         result = queue.Queue(maxsize=1)
         def request():

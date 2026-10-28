@@ -31,7 +31,9 @@ class SimulationRecorder:
                                      "qpos_address": int(model.jnt_qposadr[i]),
                                      "qvel_address": int(model.jnt_dofadr[i])} for i in range(model.njnt)]}
         self.save_metadata()
-        self.video = cv2.VideoWriter(str(self.directory / "simulation.mp4"),
+        # Hidden while incomplete: players retrying a moov-less mp4 have hung the desktop.
+        self.partial_video = self.directory / ".simulation.incomplete.mp4"
+        self.video = cv2.VideoWriter(str(self.partial_video),
                                      cv2.VideoWriter_fourcc(*"mp4v"), self.video_fps, (640, 480))
         if not self.video.isOpened():
             self.stream.close()
@@ -78,6 +80,7 @@ class SimulationRecorder:
 
     def close(self):
         self.video.release()
+        self.partial_video.replace(self.directory / "simulation.mp4")
         self.renderer.close()
         self.stream.close()
         self.metadata.update(video_start_elapsed_s=self.video_origin, video_frames=self.video_frames)

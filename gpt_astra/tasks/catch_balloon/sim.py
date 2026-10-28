@@ -1,5 +1,6 @@
 """A light red sphere approaches the robot; reset the target between attempts."""
 import json
+import os
 from pathlib import Path
 import random
 import xml.etree.ElementTree as ET
@@ -32,6 +33,15 @@ def prepare_scene(source_scene, run_directory):
     return output
 
 
+HOVER = os.environ.get("GPT_ASTRA_BALLOON") == "hover"
+# Hover mode (astra_ws): the balloon floats at reach height in front of the robot instead of dropping
+# from above the camera's view, because a free fall lasts ~0.5 s and a GPT decision takes 2-3 s.
+# Points are pelvis-frame offsets near the palms of reach_left / reach_right / reach_both.
+HOVER_POINTS = ((.45, .17, .22), (.45, -.17, .22), (.45, 0., .22))
+HOVER_SECONDS = 20.0
+HOVER_STIFFNESS, HOVER_DAMPING = 2.0, .3  # N/m, N*s/m: a balloon on a string a hand can push away
+
+
 class TaskSimulation:
     def __init__(self, model, data, start_file):
         import mujoco
@@ -50,6 +60,10 @@ class TaskSimulation:
         self.active = False
         self.contact_since = self.caught_at = None
         self.attempt = 0
+        self.anchor = None
+        self.spawned_at = 0.0
+        self.touched = False
+        self.mass = float(model.body_mass[self.body])
 
     def event(self, event, elapsed):
         item = {"event": event, "sim_elapsed_s": round(elapsed, 3), "attempt": self.attempt}
@@ -78,6 +92,9 @@ class TaskSimulation:
                     hands.add("left")
                 if name.startswith(("right_hand", "right_wrist")):
                     hands.add("right")
+            if HOVER and hands and not self.touched:
+                self.touched = True
+                self.event("touch_" + "_".join(sorted(hands)), elapsed)
             if len(hands) == 2 and float((data.qvel[self.v:self.v+3]**2).sum()) < .16:
                 if self.contact_since is None:
                     self.contact_since = elapsed
@@ -92,6 +109,9 @@ class TaskSimulation:
             elif self.caught_at is not None and elapsed-self.caught_at >= 5:
                 self.event("reset_after_catch", elapsed)
                 self.active = False
+            elif HOVER and elapsed - self.spawned_at >= HOVER_SECONDS:
+                self.event("hover_timeout", elapsed)
+                self.active = False
             if not self.active:
                 self.next_spawn = elapsed + self.rng.uniform(1.0, 2.0)
         if not self.active:
@@ -101,16 +121,28 @@ class TaskSimulation:
         if elapsed is not None and not self.active and elapsed >= self.next_spawn:
             pelvis = data.body("pelvis")
             rotation = pelvis.xmat.reshape(3, 3)
-            position = pelvis.xpos + rotation @ [self.rng.uniform(.42, .58),
-                                                self.rng.uniform(-.14, .14),
-                                                self.rng.uniform(.72, .80)]
+            if HOVER:
+                offset = [c + self.rng.uniform(-.03, .03) for c in HOVER_POINTS[self.attempt % len(HOVER_POINTS)]]
+                position = pelvis.xpos + rotation @ offset
+                self.anchor = position.copy()
+                velocity = [0, 0, 0]
+            else:
+                position = pelvis.xpos + rotation @ [self.rng.uniform(.42, .58),
+                                                    self.rng.uniform(-.14, .14),
+                                                    self.rng.uniform(.72, .80)]
+                # Alternate between dropping and a gentle throw toward the robot.
+                velocity = rotation @ ([-.12, 0, 0] if self.attempt % 2 else [0, 0, 0])
             data.qpos[self.q:self.q+7] = [*position, 1, 0, 0, 0]
-            # Alternate between dropping and a gentle throw toward the robot.
-            velocity = rotation @ ([-.12, 0, 0] if self.attempt % 2 else [0, 0, 0])
             data.qvel[self.v:self.v+6] = [*velocity, 0, 0, 0]
             self.active = True
             self.contact_since = self.caught_at = None
+            self.spawned_at, self.touched = elapsed, False
             self.attempt += 1
             self.event("spawn", elapsed)
+        if HOVER and self.active:
+            position, velocity = data.qpos[self.q:self.q+3], data.qvel[self.v:self.v+3]
+            force = HOVER_STIFFNESS * (self.anchor - position) - HOVER_DAMPING * velocity
+            force[2] -= self.mass * model.opt.gravity[2]
+            data.xfrc_applied[self.body] = [*force, 0, 0, 0]
         # The active sphere is a free MuJoCo body: gravity and contact determine
         # its motion. No artificial lift, position interpolation or drag is applied.
