@@ -108,7 +108,7 @@ class Session:
         if self.stopped or not self.process or self.process.poll() is not None:
             raise RuntimeError('Controller is not running or stop is latched')
         if self.pending and command!='idle': return False
-        if command not in {'grounded_start','motion','planner','idle','move'}:
+        if command not in {'grounded_start','motion','planner','idle','move','reference'}:
             raise ValueError('Unsupported command')
         self.seq+=1; self.pending=True
         atomic_write(self.directory/'request',f'{self.seq} {command} {int(argument)} {time.monotonic():.9f}\n')

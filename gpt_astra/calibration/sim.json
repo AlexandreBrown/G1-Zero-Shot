@@ -1,0 +1,92 @@
+{
+  "platform": "sim",
+  "note": "Real-time MuJoCo simulation on Mila (L40S, RTF ~0.99). Laptop runs slower than real time held the hands 3-4 cm closer and walked shorter; use this file for both but expect differences there.",
+  "camera": {
+    "measured": "2026-10-29 MuJoCo model (head camera on torso_link, standing G1)",
+    "position_m": [
+      0.056,
+      0.0,
+      0.504
+    ],
+    "rotation": [
+      [
+        0.0006,
+        0.6967,
+        -0.7174
+      ],
+      [
+        -1.0,
+        0.0008,
+        0.0
+      ],
+      [
+        0.0006,
+        0.7174,
+        0.6967
+      ]
+    ],
+    "rotation_note": "columns: camera x (image right), y (image up), z (backwards) in the pelvis frame",
+    "fovy_deg": 45.0
+  },
+  "balloon": {
+    "measured": "2026-10-30 locate() vs ground truth, 68 standing frames: x err sd 1.0 cm, y err +1.0 cm mean, sd 1.9 cm",
+    "radius_m": 0.075,
+    "red_min": 80,
+    "red_ratio": 2.0,
+    "min_pixels": 40,
+    "height_range_m": [
+      -0.05,
+      0.4
+    ],
+    "max_fit_residual": 0.08
+  },
+  "grab": {
+    "measured": "2026-11-04 from 100 sim catches with a balloon (jobs 11455221-11526779): reach 2 held 77/81, every miss outside 0.38-0.52 m but two; reach 1 held 17/19 at 0.40-0.46 m. yaw_tracking from grab_report (no balloon), whose cradle centres (0.391/0.418) sit ~2.5 cm closer than where real grabs succeed",
+    "meeting_x_m": [
+      0.42,
+      0.43,
+      0.445
+    ],
+    "yaw_tracking": 1.018,
+    "settle_back_m": 0.056,
+    "meet_tolerance_m": [
+      0.045,
+      0.02
+    ],
+    "zone_tolerance_m": [
+      0.035,
+      0.12
+    ]
+  },
+  "walk": {
+    "measured": "2026-11-04 walk_report: 18 probes, 4 stalled; back walked 0.13 m in 0.62 s, back_fine walked 0.05 m in 1.5 s, forward walked 0.35 m in 0.62 s, forward_fine walked 0.16 m in 1.53 s, left walked 0.03 m in 1.04 s, right walked -0.02 m in 1.04 s",
+    "walk_speed_mps": 0.4,
+    "fine_walk_speed_mps": 0.2,
+    "coast_m": {
+      "forward": 0.34,
+      "back": 0.106,
+      "left": 0.14,
+      "right": 0.062,
+      "forward_fine": 0.042,
+      "back_fine": 0.0,
+      "left_fine": 0.14,
+      "right_fine": 0.062
+    },
+    "fine_within_m": 0.3,
+    "settle_s": [
+      1.0,
+      0.6
+    ],
+    "stall_s": 2.5,
+    "kick_s": 0.4,
+    "min_step_m": 0.05,
+    "follow_x_m": 0.55,
+    "follow_tolerance_m": 0.1
+  },
+  "safety": {
+    "note": "Chosen limits, not measurements. Dead reckoning uses the commanded speeds plus coasts, an upper bound that read 9.4 m when the robot was 1.7 m from the start (fine walks move at a third of their commanded speed). The scripted person leads the robot ~3.7 m forward in a 300 s run, so the sim fence is effectively off; the robot's 1 m fence is covered by the unit tests.",
+    "lost_walk_s": 4.0,
+    "max_walk_s": 8.0,
+    "fence_m": 100.0
+  }
+}

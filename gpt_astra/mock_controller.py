@@ -14,7 +14,7 @@ def run(directory):
     clips = json.loads((directory / "catalog.json").read_text())
     frames = {c["index"]: c["frames"] for c in clips}
     sequence, state, index, frame = 0, 1, 0, 0
-    playing, fault, result, reason = False, False, "ready", ""
+    playing, planner, fault, result, reason = False, False, False, "ready", ""
     started = time.monotonic()
     motion_start = started
     while True:
@@ -36,16 +36,22 @@ def run(directory):
                     result = "rejected: expired command"
                 elif command == "grounded_start" and ready:
                     state, result = 2, "ok"
-                elif command == "motion" and state == 2 and not playing and arg in frames:
+                elif command == "motion" and state == 2 and not playing and not planner and arg in frames:
                     index, frame, playing, motion_start, result = arg, 0, True, now, "ok"
+                elif command == "planner" and state == 2 and not playing and not planner:
+                    planner, playing, result = True, True, "ok"
+                elif command in ("move", "idle") and planner and (command == "idle" or 0 <= arg < 8):
+                    result = "ok"
+                elif command == "reference" and planner:
+                    planner, playing, frame, result = False, False, 0, "ok"
         except (ValueError, OSError):
             pass
-        if playing:
+        if playing and not planner:
             frame = min(int((now-motion_start)*50), frames[index]-1)
             if frame == frames[index]-1:
                 playing = False
         atomic_write(directory / "status",
-                     f"{sequence} {state} {index} {frame} {int(playing)} 0 {int(fault)} {int(ready)}\n"
+                     f"{sequence} {state} {index} {frame} {int(playing)} {int(planner)} {int(fault)} {int(ready)}\n"
                      f"{result}\n{reason}\nMOCK state: perfect tracking, no motor checks\n")
         time.sleep(.02)
 

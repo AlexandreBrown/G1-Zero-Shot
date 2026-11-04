@@ -99,6 +99,10 @@ expires its native lease. Never kill the surviving controller while unsupported.
 Read the existing [guard limitations](../docs/sonic-laptop-safety.md); initial
 clearance checks may reject the stock hanging pose. Do not bypass failed checks.
 
+Follow mode (`--follow --task-name follow_balloon`, Claude choosing the intent, a local loop walking and grabbing)
+refuses to run on the robot until the controller build declares `reference` and `fine-move` (CAPABILITIES) and
+`gpt_astra/calibration/robot.json` is measured. Steps and tools: [ROBOT_FOLLOW_CHECKLIST.md](ROBOT_FOLLOW_CHECKLIST.md).
+
 ## Logs / extensions / tests
 
 Each run prints its persistent `gpt_astra/runs/…` folder: `events.jsonl` (latency,

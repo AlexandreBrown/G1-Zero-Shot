@@ -64,7 +64,7 @@ def stage_library(idle, folder, destination, model, limits=None):
     destination.mkdir(parents=True, exist_ok=False)
     candidates = [Path(idle)] + [p for p in (sorted(Path(folder).iterdir()) if folder else [])
                                 if p.is_dir() and (p/'joint_pos.csv').exists() and p.resolve()!=Path(idle).resolve()]
-    catalog, anchor, anchor_arrays = [], None, None
+    catalog, anchor, anchor_arrays, clips = [], None, None, []
     for i, path in enumerate(candidates):
         # Copy first, validate the immutable session snapshot, never symlink mutable motions.
         dest = destination/f'{i:04d}'
@@ -79,8 +79,7 @@ def stage_library(idle, folder, destination, model, limits=None):
                 raise ValueError('Idle must be stationary throughout')
             if np.max(np.abs(anchor[:15]-np.asarray(model['default'])[:15])) > .15:
                 raise ValueError('Idle lower body must be within 0.15 rad of SONIC nominal stance')
-        if np.max(np.abs(q[[0,-1]]-anchor)) > .10:
-            raise ValueError(f'{path}: endpoints must match idle within 0.10 rad')
+        clips.append((path, q))
         if np.max(np.abs(arrays['body_pos'][[0,-1],:3]-anchor_arrays['body_pos'][0,:3])) > .05:
             raise ValueError(f'{path}: root endpoints must match idle within 5 cm')
         qa = arrays['body_quat'][[0,-1],:4]; qb = anchor_arrays['body_quat'][0,:4]
@@ -91,6 +90,13 @@ def stage_library(idle, folder, destination, model, limits=None):
         np.savetxt(dest/'joint_vel.csv',arrays['joint_vel'],delimiter=',',comments='',
                    header=','.join(f'joint_{j}' for j in range(29)))
         catalog.append(dict(index=i,name=path.name,frames=len(q)))
+    # astra_ws: an endpoint may also chain to another clip (gpt_astra follow_balloon: grab ends holding the
+    # balloon, release starts there). The controller only starts a clip within 0.20 rad of the current reference.
+    for path, q in clips:
+        starts = [anchor] + [other[-1] for p, other in clips if p != path]
+        ends = [anchor] + [other[0] for p, other in clips if p != path]
+        if min(np.max(np.abs(q[0]-s)) for s in starts) > .10 or min(np.max(np.abs(q[-1]-e)) for e in ends) > .10:
+            raise ValueError(f'{path}: endpoints must match idle (or chain to another clip) within 0.10 rad')
     save_limits(destination.parent/'acceptance-limits.json',limits)
     (destination.parent/'init.txt').write_text(' '.join(map(str,anchor))+'\n')
     (destination.parent/'catalog.json').write_text(json.dumps(catalog,indent=2))
