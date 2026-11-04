@@ -74,9 +74,9 @@ fixed robot pose; GPT and SONIC inference were not running).
 
 ## 5. Real G1 — keep gantry and physical stop available
 
-Start the existing [robot camera server](https://nvlabs.github.io/GR00T-WholeBodyControl/tutorials/data_collection.html#camera-server-setup-on-robot).
-Synchronize robot/laptop clocks and close competing controllers. Replace the
-interface (`ip -br addr`) and camera IP:
+Follow the [camera server quick start](../camera_server/README.md) to set up the
+camera and synchronize the robot and laptop clocks. Close competing controllers.
+Replace the interface (`ip -br addr`) and camera IP:
 
 ```bash
 source .runtime/sonic/env.sh
