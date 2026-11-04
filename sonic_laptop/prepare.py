@@ -8,6 +8,10 @@ from .model import load_model
 
 ROOT = Path(__file__).resolve().parents[1]
 REL = Path('src/g1/g1_deploy_onnx_ref')
+# Planner SLOW_WALK speeds (m/s) for guarded `move`: 0-3 walk, 4-7 fine positioning before a grab.
+# Proposed from sim (0.15 shuffled in place; fine 0.3 coasted into the balloon); confirm on hardware.
+WALK_SPEED = 0.4
+FINE_WALK_SPEED = 0.2
 
 
 def replace_once(text, old, new):
@@ -49,6 +53,7 @@ INPUT = r'''
       static sonic_guard::Deadman deadman;
       static unsigned long guard_seq=0;
       static std::string guard_result="ready";
+      static bool leaving_planner=false;
       auto* keyboard=dynamic_cast<SimpleKeyboard*>(input_interface_.get());
       if(!keyboard) { guard_.trip("Only guarded keyboard input is supported"); return; }
       if(keyboard->guard_planner_start_pending && sonic_guard::now()-keyboard->guard_planner_start_time>5)
@@ -67,10 +72,15 @@ INPUT = r'''
           keyboard->PushStdinChar('\n'); guard_result="ok";
         } else if(command=="idle" && keyboard->use_planner) {
           deadman.cancel(); keyboard->PushStdinChar('r'); guard_result="ok";
-        } else if(command=="move" && keyboard->use_planner && !keyboard->guard_planner_start_pending && program_state_==ProgramState::CONTROL && argument>=0 && argument<4) {
+        } else if(command=="reference" && keyboard->use_planner && !keyboard->guard_planner_start_pending &&
+                  program_state_==ProgramState::CONTROL && !deadman.active(sonic_guard::now())) {
+          // Leave the standing planner for the reference clips; keyboard_handler blends into clip 0.
+          keyboard->PushStdinChar('\n'); leaving_planner=true; guard_result="ok";
+        } else if(command=="move" && keyboard->use_planner && !keyboard->guard_planner_start_pending && program_state_==ProgramState::CONTROL && argument>=0 && argument<8) {
+          // Arguments 4-7 repeat directions 0-3 at the fine positioning speed.
           keyboard->planner_use_movement_mode=LocomotionMode::SLOW_WALK;
-          keyboard->planner_use_movement_speed=0.15;
-          deadman.refresh(argument,stamp,sonic_guard::now()); guard_result="ok";
+          keyboard->planner_use_movement_speed=argument<4 ? '''+f'{WALK_SPEED} : {FINE_WALK_SPEED}'+r''';
+          deadman.refresh(argument%4,stamp,sonic_guard::now()); guard_result="ok";
         } else if(command=="motion" && program_state_==ProgramState::CONTROL && !keyboard->use_planner && !operator_state.play && argument>=0 && argument<(int)motion_reader_.motions.size()) {
           std::lock_guard<std::mutex> lock(current_motion_mutex_);
           auto next=motion_reader_.GetMotionShared(argument);
@@ -82,7 +92,9 @@ INPUT = r'''
           } else { guard_result="rejected: reference discontinuity"; }
         }
       }
-      if(keyboard->use_planner) keyboard->PushStdinChar(deadman.active(sonic_guard::now()) ? "ws,."[deadman.direction] : 'r');
+      // Outside the planner 'r' restarts the clip, so nothing follows the key that leaves it.
+      if(keyboard->use_planner && !leaving_planner) keyboard->PushStdinChar(deadman.active(sonic_guard::now()) ? "ws,."[deadman.direction] : 'r');
+      if(!keyboard->use_planner) leaving_planner=false;
 '''
 STATUS = r'''
       {
@@ -228,6 +240,33 @@ def patch(source, destination):
           }
       }
       if (has_planner && planner_state.enabled && planner_state.initialized) {''')
+    # Leaving the planner jumped from its arms-down stance to the arms-forward clip start (1.8 rad
+    # target steps in sim). Play a copy of clip 0 whose joints blend over one clip length from the
+    # planner's current frame into clip 0's first frame, then hold it like any finished clip.
+    s=replace_once(s,'''              operator_state.play = false;
+              reinitialize_heading = true;
+              current_motion = motion_reader.GetMotionShared(motion_reader.current_motion_index_);  // Update current motion directly
+              current_frame = 0;
+''','''              reinitialize_heading = true;
+              motion_reader.current_motion_index_ = 0;
+              auto reference = motion_reader.GetMotionShared(0);
+              auto blend = std::make_shared<MotionSequence>(*reference);
+              blend->name = "planner_exit_blend";
+              const int frames = blend->timesteps, joints = blend->GetNumJoints();
+              const double* from = current_motion->JointPositions(std::min(current_frame, current_motion->timesteps - 1));
+              const double* to = reference->JointPositions(0);
+              for (int f = 0; f < frames; ++f) {
+                double t = frames > 1 ? double(f) / (frames - 1) : 1.0, w = t * t * t * (10 - 15 * t + 6 * t * t);
+                for (int j = 0; j < joints; ++j) blend->JointPositions(f)[j] = from[j] + (to[j] - from[j]) * w;
+              }
+              for (int f = 0; f < frames; ++f)
+                for (int j = 0; j < joints; ++j)
+                  blend->JointVelocities(f)[j] = f + 1 < frames ?
+                      (blend->JointPositions(f + 1)[j] - blend->JointPositions(f)[j]) * 50.0 : 0.0;
+              current_motion = blend;
+              current_frame = 0;
+              operator_state.play = true;
+''')
     # Explicit deadman forces planner idle after 150 ms without a fresh movement request.
     p.write_text(s)
     p=include/'motion_data_reader.hpp'
@@ -237,6 +276,11 @@ def patch(source, destination):
     p=destination/'CMakeLists.txt'
     p.write_text(p.read_text().replace('-O3 -ffast-math','-O3 -fno-fast-math'))
     (destination/'GUARDED_BUILD').write_text('sonic-laptop-v3\n')
+    # The runner refuses robot follow mode unless the build declares both commands, the speeds it dead-reckons with,
+    # and planner-stance (the guard accepts SONIC's arms-down planner stance): true since the hand/body clearance
+    # check was removed (Elham, 2026-11-04).
+    (destination/'CAPABILITIES').write_text(f'reference\nfine-move\nplanner-stance\nwalk-speed {WALK_SPEED}\n'
+                                            f'fine-walk-speed {FINE_WALK_SPEED}\n')
     return destination
 
 if __name__=='__main__':

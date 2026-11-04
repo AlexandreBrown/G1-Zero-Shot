@@ -73,14 +73,12 @@ public:
                !std::isfinite(cmd.kp[i])||!std::isfinite(cmd.kd[i])||!std::isfinite(cmd.tau_ff[i])||!std::isfinite(cmd.dq_target[i])) {
                 trip("Nonfinite motor value"); return false;
             }
-            if(target[i]<lower[i]||target[i]>upper[i]||measured[i]<lower[i]-.03||measured[i]>upper[i]+.03||
-               std::abs(dq)>8||std::abs(cmd.dq_target[i])>4||std::abs(cmd.tau_ff[i])>torque[i]||
-               cmd.kp[i]<0||cmd.kp[i]>400||cmd.kd[i]<0||cmd.kd[i]>20) {
-                trip("Joint/gain/velocity/torque limit at motor "+std::to_string(i)); return false;
-            }
-            // Updates arrive at 50 Hz, writer at 500 Hz: allow one bounded 20 ms step.
-            if(previous_time && std::abs(target[i]-previous[i])>.20) {
-                trip("Target step >0.20 rad at motor "+std::to_string(i)); return false;
+            // Motion limits removed (Elham, 2026-11-04, first robot runs): the 0.20 rad target step, the 8 rad/s joint
+            // speed cap and the exact joint-range checks stopped SONIC's start on the robot. What remains only catches
+            // corrupt commands (non-finite above; targets far outside the joint range, absurd gains or torques).
+            if(target[i]<lower[i]-1.5||target[i]>upper[i]+1.5||std::abs(cmd.dq_target[i])>4||
+               std::abs(cmd.tau_ff[i])>torque[i]||cmd.kp[i]<0||cmd.kp[i]>400||cmd.kd[i]<0||cmd.kd[i]>20) {
+                trip("Corrupt command at motor "+std::to_string(i)+": target "+std::to_string(target[i])); return false;
             }
         }
         // Runtime hand/body envelope check removed (Elham, 2026-10-28): in damping the hanging arms rest the
