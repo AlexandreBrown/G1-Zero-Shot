@@ -58,6 +58,17 @@ class FollowTests(unittest.TestCase):
         self.assertTrue(np.allclose(locate(jpeg(highlight)), [.6, .1, .15], atol=.015))   # a white highlight
         self.assertIsNone(locate(jpeg(balloon_image(np.array([1.2, 0., .45])))))   # far above hand height
 
+    def test_a_balloon_and_a_red_label_are_not_merged_into_one_close_balloon(self):
+        # Robot run 2026-11-04: with the circle test loosened for a corded balloon, the balloon plus red labels on
+        # equipment fitted one huge, mostly empty circle that read as a balloon 0.25 m away; the robot walked back.
+        loose = replace(SIM, max_fit_residual=.45)
+        image = balloon_image(np.array([1.2, 0., .1]))
+        image[400:440, 20:60] = (220, 10, 10)                                 # a red label at the bottom left
+        found = locate(jpeg(image), loose)
+        self.assertTrue(found is None or found[0] > 1., found)
+        self.assertTrue(np.allclose(locate(jpeg(balloon_image(np.array([1.2, 0., .1]))), loose), [1.2, 0., .1],
+                                    atol=.03))
+
     def test_every_point_the_follower_accepts_has_a_grab_pose(self):
         test = replace(TEST, meeting_x=(.42, .45, .47), yaw_tracking=.9)
         self.assertEqual(nearest_grab(np.array([.45, 0., .16]), test), "2_10")   # the longest reach first

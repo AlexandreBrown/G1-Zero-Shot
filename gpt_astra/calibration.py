@@ -49,6 +49,7 @@ class Calibration:
     lost_walk: float
     max_walk: float
     fence: float
+    still_tolerance: float
 
     def unmeasured(self) -> list[str]:
         """Measured sections without a measurement date."""
@@ -82,7 +83,7 @@ def load(path: Path) -> Calibration:
         stall=float(walk["stall_s"]), kick=float(walk["kick_s"]), min_step=float(walk["min_step_m"]),
         follow_x=float(walk["follow_x_m"]), follow_tolerance_x=float(walk["follow_tolerance_m"]),
         lost_walk=float(safety["lost_walk_s"]), max_walk=float(safety["max_walk_s"]),
-        fence=float(safety["fence_m"]))
+        fence=float(safety["fence_m"]), still_tolerance=float(balloon["still_tolerance_m"]))
 
 
 def platform_problem(run: Path, cal: Calibration) -> str | None:

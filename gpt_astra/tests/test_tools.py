@@ -1,9 +1,13 @@
+import csv
 from dataclasses import replace
+import importlib.util
 import io
 import json
+import math
 from pathlib import Path
 import tempfile
 import sys
+from types import SimpleNamespace
 import unittest
 
 import numpy as np
@@ -13,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from gpt_astra import calibration
 from gpt_astra.calibration import SIM
-from gpt_astra.tools import check_camera, walk_report
+from gpt_astra.tools import check_camera, record_lowstate, walk_report
 
 
 def jpeg(image):
@@ -88,3 +92,55 @@ class WalkReportTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+UPSTREAM = ROOT.parent / "GR00T-WholeBodyControl"
+LEGS = {0: -.3, 3: .6, 4: -.3, 6: -.3, 9: .6, 10: -.3}
+
+
+class RobotLogTests(unittest.TestCase):
+    def test_log_rows_keep_the_columns_older_readers_use(self):
+        motor = SimpleNamespace(q=.1, dq=.2, tau_est=.3)
+        state = SimpleNamespace(motor_state=[motor] * 35, imu_state=SimpleNamespace(rpy=[0, .1, 0],
+                                                                                   quaternion=[1, 0, 0, 0]))
+        row = record_lowstate.state_row(state)
+        self.assertEqual(len(row), len(record_lowstate.STATE_HEADER) - 1)
+        self.assertEqual(record_lowstate.STATE_HEADER[1:33], [f"q{i}" for i in range(29)] + ["roll", "pitch", "yaw"])
+        self.assertEqual(row[:29], [.1] * 29)             # grab_report reads columns 1-29 as the joint angles
+        command = SimpleNamespace(motor_cmd=[SimpleNamespace(q=.5, kp=40, kd=2, tau=0)] * 35)
+        self.assertEqual(len(record_lowstate.command_row(command)), len(record_lowstate.COMMAND_HEADER) - 1)
+        self.assertEqual(record_lowstate.command_path(Path("a/joints.csv")), Path("a/joints_cmd.csv"))
+
+    @unittest.skipUnless(importlib.util.find_spec("mujoco") and (UPSTREAM / "gear_sonic").is_dir(),
+                         "needs MuJoCo and the upstream robot model (sim venv)")
+    def test_robot_log_becomes_a_replayable_standing_trajectory(self):
+        import mujoco
+        from gpt_astra.tools import robot_to_sim
+        pitch, yaw = .1, 1.2
+        quaternion = robot_to_sim.euler_quaternion(0, pitch, yaw)
+        joints = [LEGS.get(i, 0.) for i in range(29)]
+        with tempfile.TemporaryDirectory() as tmp:
+            for header, extra in ((record_lowstate.STATE_HEADER, [*quaternion, *[0.] * 58]),
+                                  (record_lowstate.STATE_HEADER[:33], [])):    # new and old (rpy-only) logs
+                log, out = Path(tmp) / "robot.csv", Path(tmp) / "replay"
+                with log.open("w", newline="") as stream:
+                    writer = csv.writer(stream)
+                    writer.writerow(header)
+                    for t in range(3):
+                        writer.writerow([1000 + .02 * t, *joints, 0, pitch, yaw, *extra])
+                self.assertEqual(robot_to_sim.convert(log, out, UPSTREAM), 3)
+                meta = json.loads((out / "trajectory_meta.json").read_text())
+                model = mujoco.MjModel.from_xml_path(meta["scene_path"])
+                data = mujoco.MjData(model)
+                rows = list(csv.reader((out / "trajectory.csv").open()))
+                self.assertEqual(len(rows[0]), 2 + model.nq + model.nv + model.nu)   # what replay.py checks
+                data.qpos[:] = [float(v) for v in rows[1][2:2 + model.nq]]
+                mujoco.mj_kinematics(model, data)
+                address = {j["name"]: j["qpos_address"] for j in meta["joints"]}
+                self.assertAlmostEqual(data.qpos[address["left_knee_joint"]], .6)
+                w, x, y, z = data.qpos[3:7]
+                self.assertAlmostEqual(math.asin(2 * (w * y - z * x)), pitch, places=3)
+                self.assertAlmostEqual(robot_to_sim.heading(data.qpos[3:7]), 0, places=3)   # faces forward
+                stander = robot_to_sim.Stander(UPSTREAM, [])
+                gap = min(mujoco.mj_geomDistance(model, data, stander.floor, g, 2., None) for g in stander.feet)
+                self.assertAlmostEqual(gap, 0, delta=.001)
+

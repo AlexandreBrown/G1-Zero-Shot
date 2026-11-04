@@ -38,7 +38,8 @@
       -0.05,
       0.4
     ],
-    "max_fit_residual": 0.08
+    "max_fit_residual": 0.08,
+    "still_tolerance_m": 0.02
   },
   "grab": {
     "measured": "2026-11-04 from 100 sim catches with a balloon (jobs 11455221-11526779): reach 2 held 77/81, every miss outside 0.38-0.52 m but two; reach 1 held 17/19 at 0.40-0.46 m. yaw_tracking from grab_report (no balloon), whose cradle centres (0.391/0.418) sit ~2.5 cm closer than where real grabs succeed",

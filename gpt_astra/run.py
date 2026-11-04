@@ -12,8 +12,10 @@ import select
 import signal
 import subprocess
 import sys
+import termios
 import threading
 import time
+import tty
 import uuid
 from datetime import datetime
 
@@ -92,6 +94,22 @@ def decision_allowed(decision, frame_received, now, state, max_age, confidence):
     return True, "accepted"
 
 
+ABORT_KEYS = " qQ"
+ABORT_HINT = "SPACE or q (no ENTER)"
+
+
+def read_keys() -> str:
+    """Every key typed since the last read ('' if none). During a run the terminal is in single-key mode, so a key
+    arrives without ENTER; ENTER itself arrives as CR or LF."""
+    keys = ""
+    while select.select([sys.stdin], [], [], 0)[0]:
+        chunk = os.read(sys.stdin.fileno(), 64).decode(errors="ignore")
+        if not chunk:
+            raise EOFError("Input closed; controller is not automatically terminated")
+        keys += chunk
+    return keys
+
+
 class Runner:
     def __init__(self, args):
         self.args = args
@@ -106,6 +124,15 @@ class Runner:
         self.last_preview = 0
         self.state = {}
         self.support_confirmed = False
+        # Reconstruction log (trace.jsonl): every follower tick, controller mode change and, on the robot, every
+        # camera frame (camera/); the robot's joints and SONIC's commands come from the recorder (robot_state*.csv).
+        self.trace_stream = self.recorder = self.recorder_log = self.controller_seen = self.camera_logged = None
+        self.record_camera, self.camera_count = args.backend == "robot", 0
+
+    def trace(self, kind, **values):
+        """High-rate line for reconstructing a run later: trace.jsonl, not printed."""
+        if self.trace_stream:
+            self.trace_stream.write(json.dumps({"time": time.time(), "event": kind, **values}) + "\n")
 
     def log(self, kind, **values):
         item = {"time": time.time(), "event": kind, **values}
@@ -120,6 +147,9 @@ class Runner:
         self.directory = RUNTIME / name
         self.directory.mkdir(mode=0o700)
         self.events = (self.directory / "events.jsonl").open("w")
+        self.trace_stream = (self.directory / "trace.jsonl").open("w", buffering=1)
+        if self.record_camera:
+            (self.directory / "camera").mkdir()
         print(f"Run folder: {self.directory}", flush=True)
         a.task = snapshot_task(a.task_name, a.task, self.directory / "task")
         if a.policy == "astra" and not os.environ.get("OPENAI_API_KEY"):
@@ -153,7 +183,7 @@ class Runner:
                        ClaudeCode(actions, model=a.claude_model, timeout=a.api_timeout) if a.policy == "claude" else
                        Astra(os.environ["OPENAI_API_KEY"], actions, model=a.model, timeout=a.api_timeout))
         self.camera = (MockCamera(a.image) if a.backend == "mock" else
-                       ZmqCamera(a.camera_host, a.camera_port, a.camera_key))
+                       ZmqCamera(a.camera_host, a.camera_port, a.camera_key, a.camera_swap_red_blue))
         if a.backend != "mock" or a.preview:
             self.preview = CameraPreview(a.backend)
         if a.backend == "sim":
@@ -183,6 +213,11 @@ class Runner:
             status = self.session.poll()
             if status:
                 self.state = status
+                mode = {key: status.get(key) for key in ("state", "index", "playing", "planner", "fault", "result",
+                                                         "reason")}
+                if mode != self.controller_seen:
+                    self.controller_seen = mode
+                    self.trace("controller", seq=status.get("seq"), frame=status.get("frame"), **mode)
             if self.session.process.poll() is not None:
                 raise RuntimeError(f"Controller exited; inspect {self.directory / 'controller.log'}")
             if self.state.get("fault") or self.session.stopped:
@@ -202,6 +237,13 @@ class Runner:
                 self.camera_rejects += 1
                 if self.camera_rejects in (1, 10, 100, 1000):
                     self.log("camera_frame_rejected", error=str(error), count=self.camera_rejects)
+            if self.record_camera and self.camera.history and self.camera.history[-1].received != self.camera_logged:
+                frame = self.camera.history[-1]
+                self.camera_logged, self.camera_count = frame.received, self.camera_count + 1
+                name = f"camera/{self.camera_count:06d}.jpg"
+                (self.directory / name).write_bytes(frame.jpeg)
+                self.trace("camera", image=name, received_monotonic=frame.received,
+                           captured=getattr(self.camera, "last_stamp", None))
             if self.preview:
                 self.preview.update(self.camera.history[-1] if self.camera.history else None)
             if (camera_required or self.camera_ready) and not self.camera_optional:
@@ -236,34 +278,28 @@ class Runner:
             raise TimeoutError(f"No live camera view from {source} within {a.camera_timeout:g}s; "
                                "check the camera server/simulator, camera key and visible preview window")
         if self.preview:
-            self.gate("CAMERA CHECK: confirm the camera window shows the correct, updating view. "
-                      "ENTER confirms the image before API preflight and body setup.")
+            self.gate("CAMERA CHECK: confirm the camera window shows the correct, updating view and a red balloon as "
+                      "red (not blue). ENTER confirms the image before API preflight and body setup.")
             self.pump(camera_required=True)
             if not self.preview.ready:
                 raise RuntimeError("Camera preview must be visible and fresh when confirming")
             self.log("camera_confirmed", camera=self.camera.history[-1].name)
 
     def gate(self, text, tolerate_fault=False):
-        # Consume already queued keystrokes so one ENTER cannot pass two gates.
-        while not self.args.auto_confirm and select.select([sys.stdin], [], [], 0)[0]:
-            queued = sys.stdin.readline()
-            if queued == "":
-                raise EOFError("Input closed; controller is not automatically terminated")
-            if queued.strip().lower() in ("q", "stop"):
-                raise KeyboardInterrupt
-        print("\n" + text + "\nPress ENTER to confirm; q + ENTER to abort.", flush=True)
+        # Discard keys typed before the prompt so one ENTER cannot pass two gates (an abort key still aborts).
+        if not self.args.auto_confirm and any(key in ABORT_KEYS for key in read_keys()):
+            raise KeyboardInterrupt
+        print("\n" + text + f"\nPress ENTER to confirm; {ABORT_HINT} to abort.", flush=True)
         if self.args.auto_confirm:
             self.log("mock_auto_confirmation", prompt=text)
             return
         while True:
             self.pump(tolerate_fault=tolerate_fault)
             if select.select([sys.stdin], [], [], .02)[0]:
-                line = sys.stdin.readline()
-                if line == "":
-                    raise EOFError("Input closed; controller is not automatically terminated")
-                if line.strip().lower() == "q":
+                keys = read_keys()
+                if any(key in ABORT_KEYS for key in keys):
                     raise KeyboardInterrupt
-                if not line.strip():
+                if any(key in "\r\n" for key in keys):
                     return
 
     def wait_for(self, predicate, timeout, camera_required=False):
@@ -277,12 +313,8 @@ class Runner:
         raise TimeoutError("Timed out waiting for controller/camera; inspect session logs")
 
     def abort_key(self):
-        if not self.args.auto_confirm and select.select([sys.stdin], [], [], 0)[0]:
-            line = sys.stdin.readline()
-            if line == "":
-                raise EOFError("Input closed")
-            if line.strip().lower() in ("q", "stop"):
-                raise KeyboardInterrupt
+        if not self.args.auto_confirm and any(key in ABORT_KEYS for key in read_keys()):
+            raise KeyboardInterrupt
 
     def ask_policy(self, preflight=False):
         frames = self.camera.latest()
@@ -349,7 +381,7 @@ class Runner:
         in a row pauses the loop with the robot standing (or holding), never in damping."""
         cal = self.calibration
         intent, mode, decisions, pending, errors = "follow", "follow", 0, None, 0
-        follower, still, grab, meet = Follower(cal), Stillness(), None, (grab_x(cal), 0.)
+        follower, still, grab, meet = Follower(cal), Stillness(cal.still_tolerance), None, (grab_x(cal), 0.)
         approach_since = last_move = out_since = ball = walking = limit = None
         # In sim the gantry band is released up to 1 s after the Start handover and fades out over 3 s; walking
         # before it is gone tipped the robot (guard latch 0.4 s after entering the planner at 3.0 s).
@@ -373,6 +405,7 @@ class Runner:
                 self.located_frame, ball = frames[-1].received, locate(frames[-1].jpeg, cal, held=mode == "hold")
             is_still = still.update(ball, now, last_move is not None and now - last_move < .4)
             tracker = {**tracker_state(ball, mode, meet, cal), "intent": intent, "still": is_still}
+            step = None
             if mode == "follow":
                 # Close in only to catch a balloon that has stopped; otherwise keep a comfortable distance.
                 if intent == "catch" and is_still and approach_since is None:
@@ -401,7 +434,7 @@ class Runner:
                         mode, meet = "hold", self.held_at(grab)
                     else:
                         follower.planner_switch()
-                    still, approach_since, out_since, walking = Stillness(), None, None, None
+                    still, approach_since, out_since, walking = Stillness(cal.still_tolerance), None, None, None
                     follower.reset()
             elif mode == "hold":
                 # Let go as soon as the balloon has left the hands (or the policy asked to): no policy round trip.
@@ -412,10 +445,15 @@ class Runner:
                     self.play("release_" + grab)
                     self.enter_planner()
                     follower.planner_switch()
-                    mode, still, meet, out_since = "follow", Stillness(), (grab_x(cal), 0.), None
+                    mode, still, meet, out_since = "follow", Stillness(cal.still_tolerance), (grab_x(cal), 0.), None
                     follower.reset()
                     if intent == "release":
                         intent = "follow"
+            self.trace("follow", ball=None if ball is None else [round(float(v), 4) for v in ball], mode=mode,
+                       intent=intent, still=is_still, approach=approach_since is not None, tracker=tracker,
+                       step=None if step is None else {"direction": step.direction, "reason": step.reason,
+                                                       "in_grab_zone": step.in_grab_zone},
+                       dead_reckoned_m=follower.position.round(3).tolist())
             if pending is None and frames is not None:
                 pending = self.request_decision(frames, tracker)
             if pending is not None and not pending.empty():
@@ -431,7 +469,8 @@ class Runner:
                 errors = 0
                 decisions += 1
                 self.log("decision", action=decision.action, confidence=decision.confidence,
-                         reason=decision.reason, tracker=tracker)
+                         reason=decision.reason, latency_s=round(time.monotonic() - self.request_started, 3),
+                         tracker=tracker)
                 if decision.action == "stop":
                     self.log("policy_pause", reason=decision.reason)
                     break
@@ -499,7 +538,9 @@ class Runner:
             (self.directory / name).parent.mkdir(exist_ok=True)
             (self.directory / name).write_bytes(frame.jpeg)
             names.append(name)
-        self.log("observation", preflight=False, images=names, tracker=tracker)
+        self.log("observation", preflight=False, images=names, tracker=tracker,
+                 previous_action=state["previous_action"])
+        self.request_started = time.monotonic()
         def request():
             try:
                 result.put((self.policy.decide(self.args.task, frames, state), None))
@@ -657,9 +698,31 @@ class Runner:
             raise RuntimeError("Controller rejected command: " + self.state.get("result", "no result"))
         self.log("command_ack", command=command, argument=argument, sequence=self.session.seq)
 
+    def start_recorder(self):
+        """Robot runs: record the robot's joints/IMU and every command SONIC sends (rt/lowstate, rt/lowcmd at 50 Hz,
+        gpt_astra/tools/record_lowstate.py) into the run folder, from before actuation until the controller has
+        stopped. Passive; a recorder that cannot start stops the run before anything moves."""
+        if self.args.backend != "robot":
+            return
+        upstream = self.args.upstream
+        self.recorder_log = (self.directory / "recorder.log").open("w")
+        self.recorder = subprocess.Popen(
+            [str(upstream / ".venv_sim/bin/python"), "-m", "gpt_astra.tools.record_lowstate", "--interface",
+             self.args.interface, "--out", str(self.directory / "robot_state.csv"), "--seconds", "86400",
+             "--parent", str(os.getpid())],
+            cwd=ROOT, stdin=subprocess.DEVNULL, stdout=self.recorder_log, stderr=subprocess.STDOUT,
+            start_new_session=True,
+            env={**os.environ, "PYTHONPATH": f"{upstream / 'external_dependencies/unitree_sdk2_python'}:{ROOT}"})
+        until = time.monotonic() + 2   # keep reading the camera meanwhile: the preflight needs a fresh frame
+        self.wait_for(lambda: time.monotonic() >= until or self.recorder.poll() is not None, 3, camera_required=True)
+        if self.recorder.poll() is not None:
+            raise RuntimeError(f"Robot state recorder exited; inspect {self.directory / 'recorder.log'}")
+        self.log("recorder_started", files=["robot_state.csv", "robot_state_cmd.csv"])
+
     def run(self):
         self.prepare()
         self.check_camera()
+        self.start_recorder()
         self.ask_policy(preflight=True)  # Vision, auth and schema check, before any body actuation.
         self.gate("SUSPENDED SETUP: G1 secured in gantry, feet OFF the ground, limbs clear. "
                   "ENTER starts body actuation and ramps to the ready reference. "
@@ -692,7 +755,7 @@ class Runner:
             self.measure_grab()
         elif self.args.measure == "walk":
             self.measure_walk()
-        print("Loop active. Ctrl+C or q + ENTER requests latched damping; gantry must catch the robot.",
+        print(f"Loop active. Ctrl+C or {ABORT_HINT} requests latched damping; gantry must catch the robot.",
               flush=True)
         for _ in range(0 if self.args.follow or self.args.measure else self.args.max_decisions):
             self.wait_for(lambda: not self.state.get("playing") or self.state.get("planner"), 15,
@@ -759,10 +822,22 @@ class Runner:
                 self.simulator.wait(timeout=15)  # Let the simulator finalize the MP4 and CSV.
             except subprocess.TimeoutExpired:
                 print("Simulator is still finalizing its recording; see simulator.log.", flush=True)
+        if self.recorder:
+            if self.recorder.poll() is not None:
+                self.log("recorder_exited_early", returncode=self.recorder.returncode)
+            else:
+                self.recorder.send_signal(signal.SIGINT)  # it closes both CSVs and prints its sample counts
+                try:
+                    self.recorder.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    self.recorder.kill()
+            self.recorder_log.close()
         if self.camera:
             self.camera.close()
         if self.preview:
             self.preview.close()
+        if self.trace_stream:
+            self.trace_stream.close()
         if self.events:
             self.events.close()
         if self.sim_log:
@@ -845,6 +920,10 @@ def parse_args(argv=None):
     p.add_argument("--camera-host", default="127.0.0.1")
     p.add_argument("--camera-port", type=int, default=5555)
     p.add_argument("--camera-key", default="ego_view")
+    p.add_argument("--camera-swap-red-blue", action=argparse.BooleanOptionalAction,
+                   help="Swap red and blue in camera frames. Default: on for --backend robot, whose camera "
+                        "server (GR00T composed_camera) JPEG-encodes RGB images with OpenCV, which assumes BGR, so "
+                        "red arrives blue; off for sim, whose publisher already converts")
     p.add_argument("--camera-timeout", type=float, default=30, help="Seconds to wait for initial camera images")
     p.add_argument("--preview", action="store_true", help="Show camera window in mock mode; always enabled for sim/robot")
     p.add_argument("--upstream", type=Path, default=ROOT.parent / "GR00T-WholeBodyControl")
@@ -873,6 +952,8 @@ def parse_args(argv=None):
             p.error(f"--{name.replace('_', '-')} must be finite and positive")
     if not 1 <= a.max_decisions <= 1000 or not 0 <= a.min_confidence <= 1:
         p.error("Use 1..1000 decisions and confidence in [0, 1]")
+    if a.camera_swap_red_blue is None:
+        a.camera_swap_red_blue = a.backend == "robot"
     if not 1 <= a.camera_port <= 65535:
         p.error("Invalid camera port")
     if a.backend != "mock" and (a.auto_confirm or a.policy == "fake" or a.image):
@@ -920,6 +1001,10 @@ def main(argv=None):
     def interrupted(signum, frame):
         raise KeyboardInterrupt
     signal.signal(signal.SIGTERM, interrupted)
+    # Single-key terminal: an abort key acts without ENTER; Ctrl+C still interrupts. Restored after the last gate.
+    terminal = None if args.auto_confirm else termios.tcgetattr(sys.stdin)
+    if terminal:
+        tty.setcbreak(sys.stdin)
     try:
         runner.run()
         return 0
@@ -931,6 +1016,8 @@ def main(argv=None):
         return 1
     finally:
         runner.cleanup()
+        if terminal:
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, terminal)
 
 
 if __name__ == "__main__":

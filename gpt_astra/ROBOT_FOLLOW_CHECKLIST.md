@@ -91,6 +91,6 @@ Start with 60 s runs, gantry slack, the operator at the physical stop. Safety li
 walk longer than 4 s, none beyond 1 m from the start, stop within 0.3 s of losing the balloon. The 1 m is dead-reckoned
 at the commanded speeds plus coasts, an upper bound that in simulation read 2.8x the real distance, so expect the
 robot to stop following after roughly 0.4 m; raise `fence_m` only after watching it. If Claude fails twice in a row, or the camera is stale for 2 s, the loop pauses
-with the robot standing (or holding), never in damping; `q` + ENTER requests latched damping as before. A controller
+with the robot standing (or holding), never in damping; SPACE or `q` (no ENTER) requests latched damping as before. A controller
 fault still latches damping, as it should. Check each run with `timing_report` and
 `python -m gpt_astra.tools.analyze_follow gpt_astra/runs/<run>`.

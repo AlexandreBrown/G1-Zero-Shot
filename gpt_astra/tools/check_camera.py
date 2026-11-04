@@ -121,7 +121,7 @@ def analyze(spots: list, results: list[dict], cal: calibration.Calibration, radi
     position, rot, fovy, rms = fit_camera([s for s, _ in seen], [r["uvr"] for _, r in seen], cal, radius,
                                           width, height)
     fitted = replace(cal, camera_position=position, camera_rotation=rot, fovy_deg=fovy, balloon_radius=radius)
-    after = [float(np.linalg.norm(blob_position(Blob(*r["uvr"], 0., 0, width, height), fitted) - spot))
+    after = [float(np.linalg.norm(blob_position(Blob(*r["uvr"], 0., 0, width, height, 1.), fitted) - spot))
              for spot, r in seen]
     residual = float(np.percentile([x for _, r in seen for x in r["residuals"]], 95))
     heights = [s[2] for s, _ in seen]
@@ -173,6 +173,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--camera-host", required=True)
     p.add_argument("--camera-port", type=int, default=5555)
     p.add_argument("--camera-key", default="ego_view")
+    p.add_argument("--camera-swap-red-blue", action=argparse.BooleanOptionalAction, default=True,
+                   help="Swap red and blue in camera frames (default on: the robot's camera server JPEG-encodes "
+                        "RGB images with OpenCV, which assumes BGR, so red arrives blue)")
     p.add_argument("--calibration", type=Path, default=calibration.for_backend("robot"))
     p.add_argument("--balloon-diameter", type=float, required=True, help="Taped diameter of the balloon (m)")
     p.add_argument("--pelvis-height", type=float, default=.79, help="Measured pelvis height above the floor (m)")
@@ -184,7 +187,7 @@ def main(argv: list[str] | None = None) -> int:
     from gpt_astra.camera import ZmqCamera
     cal = calibration.load(a.calibration)
     a.out.mkdir(parents=True)
-    camera = ZmqCamera(a.camera_host, a.camera_port, a.camera_key)
+    camera = ZmqCamera(a.camera_host, a.camera_port, a.camera_key, a.camera_swap_red_blue)
     try:
         empty_frames = []
         steps = [("empty", "Take the balloon OUT of view.")]

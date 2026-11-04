@@ -93,7 +93,7 @@ gpt_astra/.venv/bin/python gpt_astra/run.py --backend robot \
    Ground contact is **operator-confirmed**, not automatically sensed.
 5. On completion SONIC holds ready. Support the robot, then Enter to exit.
 
-**Ctrl+C / `q` + Enter requests latched damping, which can let the robot collapse.**
+**Ctrl+C, SPACE or `q` (no ENTER needed) requests latched damping, which can let the robot collapse.**
 After faults, the controller stays alive until support is confirmed. A runner crash
 expires its native lease. Never kill the surviving controller while unsupported.
 Read the existing [guard limitations](../docs/sonic-laptop-safety.md); initial
@@ -110,12 +110,42 @@ commands, rejects), `frames/` (GPT input images), `task/`, `controller.log`,
 `simulator.log`, `latest.jpg` and staged references. The folder is ignored by git.
 Default references are generated and validated; the repo's invalid bundled idle is unused.
 
+Everything carries the laptop's wall-clock time (`time`, seconds), so a run can be reconstructed:
+- `events.jsonl`: GPT requests (`observation`: images, tracker, previous action) and replies (`decision`: action,
+  confidence, reason, `latency_s`), controller acks, catches, let-gos, limits.
+- `trace.jsonl`: every follow-loop tick (balloon estimate, mode, intent, still, step and its reason, dead-reckoned
+  position), every controller mode change (state, clip, planner, fault, reason) and, on the robot, every camera
+  frame (`camera/NNNNNN.jpg`, with the robot's capture time).
+- Robot runs: `robot_state.csv` (joints, IMU, speeds, torques) and `robot_state_cmd.csv` (SONIC's joint targets and
+  gains) at 50 Hz, recorded automatically from before actuation until the controller has stopped; `controller.log`.
+
 Sim runs also save `simulation.mp4` (third-person video), `trajectory.csv` and
 `trajectory_meta.json`. Replay a trajectory on the same laptop:
 
 ```bash
 ../GR00T-WholeBodyControl/.venv_sim/bin/python gpt_astra/replay.py gpt_astra/runs/RUN_FOLDER
 ```
+
+Robot runs have no trajectory. Record one in a second terminal, started before `run.py` and stopped with Ctrl+C
+after it; it only listens (joints, IMU orientation, speeds, torques, and the controller's targets and gains in
+`<name>_cmd.csv`, at 50 Hz):
+
+```bash
+SIMPY="env PYTHONPATH=../GR00T-WholeBodyControl/external_dependencies/unitree_sdk2_python:. ../GR00T-WholeBodyControl/.venv_sim/bin/python"
+$SIMPY -m gpt_astra.tools.record_lowstate --interface enp58s0 --out gpt_astra/runs/robot_logs/$(date +%Y%m%d-%H%M%S).csv
+```
+
+Later, turn the log into a trajectory and replay it in MuJoCo. The log has no base position, so the lower foot is
+kept on the floor (gantry hanging looks like standing, walking replays in place):
+
+```bash
+$SIMPY -m gpt_astra.tools.robot_to_sim gpt_astra/runs/robot_logs/LOG.csv
+$SIMPY gpt_astra/replay.py gpt_astra/runs/robot_logs/LOG_replay --speed 0.5
+```
+
+The robot's camera server (GR00T `composed_camera`) JPEG-encodes RGB images with OpenCV, which assumes BGR, so a
+red balloon arrives blue. `run.py --backend robot` and `tools.check_camera` swap red and blue back by default
+(`--no-camera-swap-red-blue` turns it off if the server is ever fixed); check at CAMERA CHECK that red looks red.
 
 The default prompt is [tasks/catch_balloon/task.txt](tasks/catch_balloon/task.txt). To add a
 task, create `tasks/NAME/task.txt`, then use `--task-name NAME`; optional

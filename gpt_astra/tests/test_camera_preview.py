@@ -8,6 +8,7 @@ import select
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 import unittest
 from unittest.mock import patch
@@ -62,6 +63,37 @@ class CameraSetupTests(unittest.TestCase):
             runner.directory = Path(tmp)
             with self.assertRaisesRegex(TimeoutError, "Camera missing/stale"):
                 runner.gate("Confirm the camera")
+
+    def test_abort_keys_act_without_enter_and_enter_confirms(self):
+        args = parse_args(["--policy", "fake", "--auto-confirm"])
+        args.auto_confirm = False
+        runner = Runner(args)
+        deadline = [0.]
+        def pump(**kwargs):
+            if time.monotonic() > deadline[0]:
+                raise TimeoutError("the gate did not react to the key")
+        runner.pump = pump
+        for typed, before_prompt, outcome in ((b"\n", False, None), (b"\r", False, None), (b"x\n", False, None),
+                                              (b" ", False, KeyboardInterrupt), (b"q", False, KeyboardInterrupt),
+                                              (b"q", True, KeyboardInterrupt)):
+            read, write = os.pipe()
+            deadline[0] = time.monotonic() + 2
+            if before_prompt:
+                os.write(write, typed)
+            else:
+                threading.Timer(.1, os.write, (write, typed)).start()
+            with os.fdopen(read) as keys, patch("sys.stdin", keys), redirect_stdout(io.StringIO()):
+                if outcome:
+                    with self.assertRaises(outcome, msg=typed):
+                        runner.gate("Confirm")
+                else:
+                    runner.gate("Confirm")
+                os.write(write, b"\n")
+                runner.abort_key()                       # ENTER alone is not an abort during the loop
+                os.write(write, b"q")
+                with self.assertRaises(KeyboardInterrupt):
+                    runner.abort_key()
+            os.close(write)
 
     def test_no_desktop_errors_before_policy_or_controller_start(self):
         args = parse_args(["--policy", "fake", "--auto-confirm", "--preview"])

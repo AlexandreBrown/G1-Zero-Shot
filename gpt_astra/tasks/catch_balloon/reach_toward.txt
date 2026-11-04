@@ -1,0 +1,13 @@
+Reach toward the red balloon whenever you can see it. In simulation, a red sphere
+represents the balloon.
+For this task the balloon counts as within reach whenever any part of it is visible
+in the ego camera: on the floor, low, far away, partly hidden or at the edge of the
+image. The reach does not have to touch it; it points the arms toward it.
+Choose the arm by where the balloon is in the image: reach_left when it is in the
+left part of the image (the robot's left), reach_right when it is in the right part,
+reach_both when it is near the middle.
+Hold only when no red balloon is visible, or when a person's body is within arm's
+length in front of the robot, where a reach could hit them.
+The camera cannot see behind the robot; never assume that unseen space is clear.
+The available actions are bounded arm reaches with stationary feet; they do not
+close fingers or provide a guaranteed grasp.

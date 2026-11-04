@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 import threading
 import time
 import unittest
@@ -360,6 +361,44 @@ class CameraTests(unittest.TestCase):
             context.term()
 
 
+    def test_robot_camera_red_arrives_red_after_the_swap(self):
+        import msgpack
+        import zmq
+        # The robot's server JPEG-encodes an RGB array with OpenCV (which takes it for BGR): a red balloon is stored
+        # in the JPEG's blue channel.
+        robot_jpeg = jpeg_thumbnail(Image.new("RGB", (30, 40), (10, 20, 220)))
+        context = zmq.Context()
+        publisher = context.socket(zmq.PUB)
+        port = publisher.bind_to_random_port("tcp://127.0.0.1")
+        cameras = {True: ZmqCamera("127.0.0.1", port, "ego_view", swap_red_blue=True),
+                   False: ZmqCamera("127.0.0.1", port, "ego_view")}
+        try:
+            time.sleep(.2)
+            message = {"timestamps": {"ego_view": time.time()},
+                       "images": {"ego_view": base64.b64encode(robot_jpeg).decode()}}
+            for _ in range(20):
+                publisher.send(msgpack.packb(message, use_bin_type=True))
+                time.sleep(.01)
+                for camera in cameras.values():
+                    camera.poll()
+                if all(camera.history for camera in cameras.values()):
+                    break
+            colours = {swap: Image.open(io.BytesIO(camera.history[-1].jpeg)).convert("RGB").getpixel((15, 20))
+                       for swap, camera in cameras.items()}
+            self.assertGreater(colours[True][0], 180)       # red, as the balloon really is
+            self.assertLess(colours[True][2], 60)
+            self.assertGreater(colours[False][2], 180)      # without the swap: blue
+        finally:
+            for camera in cameras.values():
+                camera.close()
+            publisher.close(linger=0)
+            context.term()
+        self.assertFalse(parse_args(["--policy", "fake", "--auto-confirm"]).camera_swap_red_blue)
+        with tempfile.TemporaryDirectory() as tmp:
+            robot = ["--backend", "robot", "--interface", "enp3s0", "--prepare-only", tmp + "/library"]
+            self.assertTrue(parse_args(robot).camera_swap_red_blue)
+            self.assertFalse(parse_args(robot + ["--no-camera-swap-red-blue"]).camera_swap_red_blue)
+
 class ConfigurationTests(unittest.TestCase):
     def test_model_default_environment_and_cli_precedence(self):
         with patch.dict(os.environ, {}, clear=True):
@@ -480,6 +519,7 @@ class IntegrationTests(unittest.TestCase):
              patch("gpt_astra.run.locate", ball), patch.object(FakePolicy, "decide", return_value=catch), \
              redirect_stdout(io.StringIO()):
             runner = Runner(args)
+            runner.record_camera = True                   # as on the robot
             commands = []
             try:
                 with patch.object(MockSession, "command", autospec=True,
@@ -495,8 +535,37 @@ class IntegrationTests(unittest.TestCase):
                 acks = [e["command"] for e in events if e["event"] == "command_ack"]
                 self.assertEqual(acks[:6], ["grounded_start", "planner", "idle", "reference", "motion", "motion"])
                 self.assertEqual(acks[6], "planner")
+                # Everything needed to reconstruct the run: follower ticks, controller modes, every camera frame,
+                # and the latency of each decision.
+                trace = [json.loads(line) for line in (runner.directory / "trace.jsonl").read_text().splitlines()]
+                kinds = {e["event"] for e in trace}
+                self.assertTrue({"follow", "controller", "camera"} <= kinds, kinds)
+                ticks = [e for e in trace if e["event"] == "follow"]
+                self.assertEqual({e["mode"] for e in ticks}, {"follow", "hold"})
+                self.assertTrue(any(e["step"] and e["step"]["direction"] == 2 for e in ticks))
+                cameras = [e for e in trace if e["event"] == "camera"]
+                self.assertTrue(all((runner.directory / e["image"]).is_file() for e in cameras))
+                self.assertTrue(all("latency_s" in e for e in events if e["event"] == "decision"))
             finally:
                 runner.cleanup()
+
+    def test_robot_recorder_start_keeps_the_camera_fresh(self):
+        # The preflight right after it needs a frame <0.5 s old: waiting for the recorder must keep reading the camera.
+        args = parse_args(["--policy", "fake", "--auto-confirm"])
+        args.backend, args.interface = "robot", "enp3s0"
+        runner, pumps = Runner(args), []
+        runner.pump = lambda camera_required=False, tolerate_fault=False: pumps.append((time.monotonic(), camera_required))
+        process = SimpleNamespace(poll=lambda: None)
+        with tempfile.TemporaryDirectory() as tmp, patch("gpt_astra.run.subprocess.Popen", return_value=process) as popen, \
+             redirect_stdout(io.StringIO()):
+            runner.directory = Path(tmp)
+            runner.events = (runner.directory / "events.jsonl").open("w")
+            runner.start_recorder()
+            runner.recorder_log.close()
+            runner.events.close()
+        self.assertIn("gpt_astra.tools.record_lowstate", popen.call_args[0][0])
+        self.assertTrue(all(required for _, required in pumps))
+        self.assertLess(max(b[0] - a[0] for a, b in zip(pumps, pumps[1:])), .2)
 
     def test_follow_pauses_standing_when_the_policy_keeps_failing(self):
         args = parse_args(["--backend", "mock", "--policy", "fake", "--auto-confirm", "--follow",

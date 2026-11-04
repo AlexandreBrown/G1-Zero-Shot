@@ -72,7 +72,8 @@ def coverage_gaps(cal: Calibration = SIM) -> list[tuple[float, float]]:
 
 @dataclass
 class Blob:
-    """The red blob's fitted circle in pixels; residual is the outline's RMS distance from it over its radius."""
+    """The red blob's fitted circle in pixels; residual is the outline's RMS distance from it over its radius;
+    coverage is the share of the circle's in-image area that is red."""
     u: float
     v: float
     radius: float
@@ -80,6 +81,7 @@ class Blob:
     pixels: int
     width: int
     height: int
+    coverage: float
 
 
 def fit_blob(jpeg: bytes, cal: Calibration = SIM) -> Blob | None:
@@ -109,7 +111,9 @@ def fit_blob(jpeg: bytes, cal: Calibration = SIM) -> Blob | None:
     u, v = b0 / 2, b1 / 2
     radius = float(np.sqrt(max(b2 + u * u + v * v, 1e-9)))
     residual = float(np.sqrt(np.mean((np.hypot(cols - u, rows - v) - radius) ** 2)) / radius)
-    return Blob(float(u), float(v), radius, residual, pixels, width, height)
+    ys, xs = np.ogrid[:height, :width]
+    area = int(((xs - u) ** 2 + (ys - v) ** 2 <= radius ** 2).sum())
+    return Blob(float(u), float(v), radius, residual, pixels, width, height, pixels / max(area, 1))
 
 
 def blob_position(blob: Blob, cal: Calibration = SIM) -> np.ndarray:
@@ -123,6 +127,9 @@ def blob_position(blob: Blob, cal: Calibration = SIM) -> np.ndarray:
 # Held between the hands the balloon's outline is partly hidden: in simulation the fit residual reached 0.15 there
 # (at most 0.03 in open view), so a held balloon is judged with this much looser circle test.
 HELD_RESIDUAL_FACTOR = 3.
+# A balloon fills its fitted circle (robot camera, 2026-11-04: a cord across it still leaves ~0.8 red); two red things
+# merged into one fit do not (a balloon plus red labels on nearby equipment: 0.05). Held, the hands cover part of it.
+MIN_COVERAGE, HELD_MIN_COVERAGE = .5, .25
 
 
 def locate(jpeg: bytes, cal: Calibration = SIM, held: bool = False) -> np.ndarray | None:
@@ -130,7 +137,8 @@ def locate(jpeg: bytes, cal: Calibration = SIM, held: bool = False) -> np.ndarra
     blob whose outline is not a circle (clothing, a red bag; a red square fits with residual 0.11) or that would sit
     outside the height a held balloon has is not followed."""
     blob = fit_blob(jpeg, cal)
-    if blob is None or blob.residual > cal.max_fit_residual * (HELD_RESIDUAL_FACTOR if held else 1):
+    if blob is None or blob.residual > cal.max_fit_residual * (HELD_RESIDUAL_FACTOR if held else 1) or \
+            blob.coverage < (HELD_MIN_COVERAGE if held else MIN_COVERAGE):
         return None
     position = blob_position(blob, cal)
     return position if cal.height_range[0] <= position[2] <= cal.height_range[1] else None
@@ -264,9 +272,10 @@ class Follower:
 
 
 class Stillness:
-    """The balloon counts as still once the robot itself stands and the estimate stays within 2 cm for 0.6 s."""
-    def __init__(self):
-        self.history = []
+    """The balloon counts as still once the robot itself stands and the estimate stays within tolerance (m;
+    Calibration.still_tolerance, 2 cm in simulation) for 0.6 s."""
+    def __init__(self, tolerance: float):
+        self.history, self.tolerance = [], tolerance
 
     def update(self, ball: np.ndarray | None, now: float, walking: bool) -> bool:
         if walking or ball is None:
@@ -274,7 +283,7 @@ class Stillness:
             return False
         self.history = [(t, b) for t, b in self.history if now - t <= .8] + [(now, ball)]
         return (now - self.history[0][0] >= .6 and
-                all(np.linalg.norm(b[:2] - ball[:2]) < .02 for _, b in self.history))
+                all(np.linalg.norm(b[:2] - ball[:2]) < self.tolerance for _, b in self.history))
 
 
 def tracker_state(ball: np.ndarray | None, mode: str, meet: tuple[float, float] | None = None,
