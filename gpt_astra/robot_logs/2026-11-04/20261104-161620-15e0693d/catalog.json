@@ -1,0 +1,427 @@
+[
+  {
+    "index": 0,
+    "name": "ready",
+    "frames": 50
+  },
+  {
+    "index": 1,
+    "name": "grab_1_0",
+    "frames": 92
+  },
+  {
+    "index": 2,
+    "name": "grab_1_1",
+    "frames": 92
+  },
+  {
+    "index": 3,
+    "name": "grab_1_10",
+    "frames": 92
+  },
+  {
+    "index": 4,
+    "name": "grab_1_11",
+    "frames": 92
+  },
+  {
+    "index": 5,
+    "name": "grab_1_12",
+    "frames": 92
+  },
+  {
+    "index": 6,
+    "name": "grab_1_13",
+    "frames": 92
+  },
+  {
+    "index": 7,
+    "name": "grab_1_14",
+    "frames": 92
+  },
+  {
+    "index": 8,
+    "name": "grab_1_15",
+    "frames": 92
+  },
+  {
+    "index": 9,
+    "name": "grab_1_16",
+    "frames": 92
+  },
+  {
+    "index": 10,
+    "name": "grab_1_17",
+    "frames": 92
+  },
+  {
+    "index": 11,
+    "name": "grab_1_18",
+    "frames": 92
+  },
+  {
+    "index": 12,
+    "name": "grab_1_19",
+    "frames": 92
+  },
+  {
+    "index": 13,
+    "name": "grab_1_2",
+    "frames": 92
+  },
+  {
+    "index": 14,
+    "name": "grab_1_20",
+    "frames": 92
+  },
+  {
+    "index": 15,
+    "name": "grab_1_3",
+    "frames": 92
+  },
+  {
+    "index": 16,
+    "name": "grab_1_4",
+    "frames": 92
+  },
+  {
+    "index": 17,
+    "name": "grab_1_5",
+    "frames": 92
+  },
+  {
+    "index": 18,
+    "name": "grab_1_6",
+    "frames": 92
+  },
+  {
+    "index": 19,
+    "name": "grab_1_7",
+    "frames": 92
+  },
+  {
+    "index": 20,
+    "name": "grab_1_8",
+    "frames": 92
+  },
+  {
+    "index": 21,
+    "name": "grab_1_9",
+    "frames": 92
+  },
+  {
+    "index": 22,
+    "name": "grab_2_0",
+    "frames": 92
+  },
+  {
+    "index": 23,
+    "name": "grab_2_1",
+    "frames": 92
+  },
+  {
+    "index": 24,
+    "name": "grab_2_10",
+    "frames": 92
+  },
+  {
+    "index": 25,
+    "name": "grab_2_11",
+    "frames": 92
+  },
+  {
+    "index": 26,
+    "name": "grab_2_12",
+    "frames": 92
+  },
+  {
+    "index": 27,
+    "name": "grab_2_13",
+    "frames": 92
+  },
+  {
+    "index": 28,
+    "name": "grab_2_14",
+    "frames": 92
+  },
+  {
+    "index": 29,
+    "name": "grab_2_15",
+    "frames": 92
+  },
+  {
+    "index": 30,
+    "name": "grab_2_16",
+    "frames": 92
+  },
+  {
+    "index": 31,
+    "name": "grab_2_17",
+    "frames": 92
+  },
+  {
+    "index": 32,
+    "name": "grab_2_18",
+    "frames": 92
+  },
+  {
+    "index": 33,
+    "name": "grab_2_19",
+    "frames": 92
+  },
+  {
+    "index": 34,
+    "name": "grab_2_2",
+    "frames": 92
+  },
+  {
+    "index": 35,
+    "name": "grab_2_20",
+    "frames": 92
+  },
+  {
+    "index": 36,
+    "name": "grab_2_3",
+    "frames": 92
+  },
+  {
+    "index": 37,
+    "name": "grab_2_4",
+    "frames": 92
+  },
+  {
+    "index": 38,
+    "name": "grab_2_5",
+    "frames": 92
+  },
+  {
+    "index": 39,
+    "name": "grab_2_6",
+    "frames": 92
+  },
+  {
+    "index": 40,
+    "name": "grab_2_7",
+    "frames": 92
+  },
+  {
+    "index": 41,
+    "name": "grab_2_8",
+    "frames": 92
+  },
+  {
+    "index": 42,
+    "name": "grab_2_9",
+    "frames": 92
+  },
+  {
+    "index": 43,
+    "name": "release_1_0",
+    "frames": 92
+  },
+  {
+    "index": 44,
+    "name": "release_1_1",
+    "frames": 92
+  },
+  {
+    "index": 45,
+    "name": "release_1_10",
+    "frames": 92
+  },
+  {
+    "index": 46,
+    "name": "release_1_11",
+    "frames": 92
+  },
+  {
+    "index": 47,
+    "name": "release_1_12",
+    "frames": 92
+  },
+  {
+    "index": 48,
+    "name": "release_1_13",
+    "frames": 92
+  },
+  {
+    "index": 49,
+    "name": "release_1_14",
+    "frames": 92
+  },
+  {
+    "index": 50,
+    "name": "release_1_15",
+    "frames": 92
+  },
+  {
+    "index": 51,
+    "name": "release_1_16",
+    "frames": 92
+  },
+  {
+    "index": 52,
+    "name": "release_1_17",
+    "frames": 92
+  },
+  {
+    "index": 53,
+    "name": "release_1_18",
+    "frames": 92
+  },
+  {
+    "index": 54,
+    "name": "release_1_19",
+    "frames": 92
+  },
+  {
+    "index": 55,
+    "name": "release_1_2",
+    "frames": 92
+  },
+  {
+    "index": 56,
+    "name": "release_1_20",
+    "frames": 92
+  },
+  {
+    "index": 57,
+    "name": "release_1_3",
+    "frames": 92
+  },
+  {
+    "index": 58,
+    "name": "release_1_4",
+    "frames": 92
+  },
+  {
+    "index": 59,
+    "name": "release_1_5",
+    "frames": 92
+  },
+  {
+    "index": 60,
+    "name": "release_1_6",
+    "frames": 92
+  },
+  {
+    "index": 61,
+    "name": "release_1_7",
+    "frames": 92
+  },
+  {
+    "index": 62,
+    "name": "release_1_8",
+    "frames": 92
+  },
+  {
+    "index": 63,
+    "name": "release_1_9",
+    "frames": 92
+  },
+  {
+    "index": 64,
+    "name": "release_2_0",
+    "frames": 92
+  },
+  {
+    "index": 65,
+    "name": "release_2_1",
+    "frames": 92
+  },
+  {
+    "index": 66,
+    "name": "release_2_10",
+    "frames": 92
+  },
+  {
+    "index": 67,
+    "name": "release_2_11",
+    "frames": 92
+  },
+  {
+    "index": 68,
+    "name": "release_2_12",
+    "frames": 92
+  },
+  {
+    "index": 69,
+    "name": "release_2_13",
+    "frames": 92
+  },
+  {
+    "index": 70,
+    "name": "release_2_14",
+    "frames": 92
+  },
+  {
+    "index": 71,
+    "name": "release_2_15",
+    "frames": 92
+  },
+  {
+    "index": 72,
+    "name": "release_2_16",
+    "frames": 92
+  },
+  {
+    "index": 73,
+    "name": "release_2_17",
+    "frames": 92
+  },
+  {
+    "index": 74,
+    "name": "release_2_18",
+    "frames": 92
+  },
+  {
+    "index": 75,
+    "name": "release_2_19",
+    "frames": 92
+  },
+  {
+    "index": 76,
+    "name": "release_2_2",
+    "frames": 92
+  },
+  {
+    "index": 77,
+    "name": "release_2_20",
+    "frames": 92
+  },
+  {
+    "index": 78,
+    "name": "release_2_3",
+    "frames": 92
+  },
+  {
+    "index": 79,
+    "name": "release_2_4",
+    "frames": 92
+  },
+  {
+    "index": 80,
+    "name": "release_2_5",
+    "frames": 92
+  },
+  {
+    "index": 81,
+    "name": "release_2_6",
+    "frames": 92
+  },
+  {
+    "index": 82,
+    "name": "release_2_7",
+    "frames": 92
+  },
+  {
+    "index": 83,
+    "name": "release_2_8",
+    "frames": 92
+  },
+  {
+    "index": 84,
+    "name": "release_2_9",
+    "frames": 92
+  }
+]

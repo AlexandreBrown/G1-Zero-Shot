@@ -118,6 +118,9 @@ Everything carries the laptop's wall-clock time (`time`, seconds), so a run can 
   frame (`camera/NNNNNN.jpg`, with the robot's capture time).
 - Robot runs: `robot_state.csv` (joints, IMU, speeds, torques) and `robot_state_cmd.csv` (SONIC's joint targets and
   gains) at 50 Hz, recorded automatically from before actuation until the controller has stopped; `controller.log`.
+- To share a run (e.g. in git): `python -m gpt_astra.tools.compact_run <run> gpt_astra/robot_logs/<date>/<run>` keeps
+  every log, gzips the CSVs and turns `camera/` into `camera.mp4` (~10 MB instead of ~200 MB). First robot runs:
+  [robot_logs/2026-11-04](robot_logs/2026-11-04/README.md).
 
 Sim runs also save `simulation.mp4` (third-person video), `trajectory.csv` and
 `trajectory_meta.json`. Replay a trajectory on the same laptop:

@@ -1,0 +1,68 @@
+{"time": 1793824508.294338, "event": "prepared", "backend": "robot", "policy": "astra", "model": "gpt-6.1-terra", "pause_world": false, "walk": false, "follow": false, "task_name": "catch_balloon", "task": "Catch the red balloon moving in front of the robot. In simulation, a red sphere\nrepresents the balloon. Track it in the ego camera and choose a reach only when\nit is visible and within reach. Hold when unsure or when the target is not visible.\nThe camera cannot see behind the robot; never assume that unseen space is clear.\nThe available actions are bounded arm reaches with stationary feet; they do not\nclose fingers or provide a guaranteed grasp.", "max_decisions": 20, "max_decision_age": 2}
+{"time": 1793824510.6100445, "event": "camera_confirmed", "camera": "ego_view"}
+{"time": 1793824510.6102774, "event": "observation", "preflight": true, "images": ["frames/0001_preflight_0.jpg", "frames/0001_preflight_1.jpg"]}
+{"time": 1793824512.286186, "event": "preflight_response", "action": "hold", "confidence": 1.0, "reason": "Preflight connectivity test; no motion.", "latency_s": 1.676}
+{"time": 1793824540.0423915, "event": "suspended_checks_passed", "detail": "Joint error 0.219937 rad / 0.30; speed 0.0154275 rad/s / 0.30; settled 2.09001 s / 2.0"}
+{"time": 1793824564.1660788, "event": "command_ack", "command": "grounded_start", "argument": 0, "sequence": 1}
+{"time": 1793824564.2301123, "event": "standing_reference_active"}
+{"time": 1793824564.2392488, "event": "observation", "preflight": false, "images": ["frames/0002_decision_0.jpg", "frames/0002_decision_1.jpg"]}
+{"time": 1793824566.9346144, "event": "decision", "action": "hold", "confidence": 0.99, "reason": "The red balloon is not visible.", "latency_s": 2.695}
+{"time": 1793824566.9542112, "event": "hold", "reason": "decision based on stale image"}
+{"time": 1793824567.2321236, "event": "observation", "preflight": false, "images": ["frames/0003_decision_0.jpg", "frames/0003_decision_1.jpg"]}
+{"time": 1793824569.1862159, "event": "decision", "action": "hold", "confidence": 0.99, "reason": "The red balloon is not visible.", "latency_s": 1.954}
+{"time": 1793824569.1966536, "event": "hold", "reason": "The red balloon is not visible."}
+{"time": 1793824569.4835029, "event": "observation", "preflight": false, "images": ["frames/0004_decision_0.jpg", "frames/0004_decision_1.jpg"]}
+{"time": 1793824571.278593, "event": "decision", "action": "hold", "confidence": 0.99, "reason": "The red balloon is not visible.", "latency_s": 1.795}
+{"time": 1793824571.2959018, "event": "hold", "reason": "The red balloon is not visible."}
+{"time": 1793824571.5842648, "event": "observation", "preflight": false, "images": ["frames/0005_decision_0.jpg", "frames/0005_decision_1.jpg"]}
+{"time": 1793824573.1063855, "event": "decision", "action": "hold", "confidence": 0.99, "reason": "The red balloon is not visible.", "latency_s": 1.522}
+{"time": 1793824573.123394, "event": "hold", "reason": "The red balloon is not visible."}
+{"time": 1793824573.445081, "event": "observation", "preflight": false, "images": ["frames/0006_decision_0.jpg", "frames/0006_decision_1.jpg"]}
+{"time": 1793824574.7807078, "event": "decision", "action": "hold", "confidence": 0.99, "reason": "The red balloon is not visible.", "latency_s": 1.335}
+{"time": 1793824574.782465, "event": "hold", "reason": "The red balloon is not visible."}
+{"time": 1793824575.0509806, "event": "observation", "preflight": false, "images": ["frames/0007_decision_0.jpg", "frames/0007_decision_1.jpg"]}
+{"time": 1793824576.6615343, "event": "decision", "action": "hold", "confidence": 0.99, "reason": "The red balloon is not visible.", "latency_s": 1.61}
+{"time": 1793824576.6685565, "event": "hold", "reason": "The red balloon is not visible."}
+{"time": 1793824576.9196527, "event": "observation", "preflight": false, "images": ["frames/0008_decision_0.jpg", "frames/0008_decision_1.jpg"]}
+{"time": 1793824578.4629216, "event": "decision", "action": "hold", "confidence": 0.99, "reason": "The red balloon is not visible.", "latency_s": 1.543}
+{"time": 1793824578.4826512, "event": "hold", "reason": "The red balloon is not visible."}
+{"time": 1793824578.765236, "event": "observation", "preflight": false, "images": ["frames/0009_decision_0.jpg", "frames/0009_decision_1.jpg"]}
+{"time": 1793824580.7335737, "event": "decision", "action": "hold", "confidence": 0.92, "reason": "The balloon has just appeared; its distance and motion are uncertain.", "latency_s": 1.968}
+{"time": 1793824580.7529838, "event": "hold", "reason": "The balloon has just appeared; its distance and motion are uncertain."}
+{"time": 1793824581.0311565, "event": "observation", "preflight": false, "images": ["frames/0010_decision_0.jpg", "frames/0010_decision_1.jpg"]}
+{"time": 1793824583.1508958, "event": "decision", "action": "hold", "confidence": 0.91, "reason": "The balloon is moving left quickly, and its reachability is uncertain.", "latency_s": 2.119}
+{"time": 1793824583.161551, "event": "hold", "reason": "decision based on stale image"}
+{"time": 1793824583.474479, "event": "observation", "preflight": false, "images": ["frames/0011_decision_0.jpg", "frames/0011_decision_1.jpg"]}
+{"time": 1793824586.3905675, "event": "decision", "action": "hold", "confidence": 0.85, "reason": "The balloon is moving, and its reachability and future position are uncertain.", "latency_s": 2.916}
+{"time": 1793824586.492105, "event": "hold", "reason": "decision based on stale image"}
+{"time": 1793824586.8491406, "event": "observation", "preflight": false, "images": ["frames/0012_decision_0.jpg", "frames/0012_decision_1.jpg"]}
+{"time": 1793824588.9888296, "event": "decision", "action": "hold", "confidence": 0.85, "reason": "The balloon is moving, and its reachability during the slow reach is uncertain.", "latency_s": 2.139}
+{"time": 1793824588.9963453, "event": "hold", "reason": "decision based on stale image"}
+{"time": 1793824589.3119075, "event": "observation", "preflight": false, "images": ["frames/0013_decision_0.jpg", "frames/0013_decision_1.jpg"]}
+{"time": 1793824591.19598, "event": "decision", "action": "hold", "confidence": 0.96, "reason": "The sphere is low near the floor and moving downward, outside the described upward reach.", "latency_s": 1.884}
+{"time": 1793824591.2301233, "event": "hold", "reason": "The sphere is low near the floor and moving downward, outside the described upward reach."}
+{"time": 1793824591.4873092, "event": "observation", "preflight": false, "images": ["frames/0014_decision_0.jpg", "frames/0014_decision_1.jpg"]}
+{"time": 1793824593.3519073, "event": "decision", "action": "hold", "confidence": 0.96, "reason": "The sphere is on the floor, outside the described forward and upward reach.", "latency_s": 1.864}
+{"time": 1793824593.390412, "event": "hold", "reason": "The sphere is on the floor, outside the described forward and upward reach."}
+{"time": 1793824593.6730049, "event": "observation", "preflight": false, "images": ["frames/0015_decision_0.jpg", "frames/0015_decision_1.jpg"]}
+{"time": 1793824595.374663, "event": "decision", "action": "hold", "confidence": 0.96, "reason": "The red sphere is on the floor, outside the described upward reach.", "latency_s": 1.701}
+{"time": 1793824595.3861086, "event": "hold", "reason": "The red sphere is on the floor, outside the described upward reach."}
+{"time": 1793824595.641218, "event": "observation", "preflight": false, "images": ["frames/0016_decision_0.jpg", "frames/0016_decision_1.jpg"]}
+{"time": 1793824597.197728, "event": "decision", "action": "hold", "confidence": 0.98, "reason": "The red sphere is on the floor, outside the forward-upward reach trajectory.", "latency_s": 1.556}
+{"time": 1793824597.2103415, "event": "hold", "reason": "The red sphere is on the floor, outside the forward-upward reach trajectory."}
+{"time": 1793824597.4769135, "event": "observation", "preflight": false, "images": ["frames/0017_decision_0.jpg", "frames/0017_decision_1.jpg"]}
+{"time": 1793824599.6684933, "event": "decision", "action": "hold", "confidence": 0.96, "reason": "The red sphere is on the floor, outside the described upward reach.", "latency_s": 2.191}
+{"time": 1793824599.6790013, "event": "hold", "reason": "decision based on stale image"}
+{"time": 1793824599.9478595, "event": "observation", "preflight": false, "images": ["frames/0018_decision_0.jpg", "frames/0018_decision_1.jpg"]}
+{"time": 1793824602.0857446, "event": "decision", "action": "hold", "confidence": 0.96, "reason": "The red object is on the floor, outside the described upward reach; a person is also nearby.", "latency_s": 2.138}
+{"time": 1793824602.1507757, "event": "hold", "reason": "decision based on stale image"}
+{"time": 1793824602.4345493, "event": "observation", "preflight": false, "images": ["frames/0019_decision_0.jpg", "frames/0019_decision_1.jpg"]}
+{"time": 1793824604.8714995, "event": "decision", "action": "hold", "confidence": 0.96, "reason": "The red sphere is on the floor, outside the described forward-and-upward reach.", "latency_s": 2.437}
+{"time": 1793824604.8892167, "event": "hold", "reason": "decision based on stale image"}
+{"time": 1793824605.2020366, "event": "observation", "preflight": false, "images": ["frames/0020_decision_0.jpg", "frames/0020_decision_1.jpg"]}
+{"time": 1793824606.9845726, "event": "decision", "action": "hold", "confidence": 0.98, "reason": "The balloon is near the floor, outside the described upward reach, and a person is nearby.", "latency_s": 1.782}
+{"time": 1793824607.073109, "event": "hold", "reason": "The balloon is near the floor, outside the described upward reach, and a person is nearby."}
+{"time": 1793824607.4548564, "event": "observation", "preflight": false, "images": ["frames/0021_decision_0.jpg", "frames/0021_decision_1.jpg"]}
+{"time": 1793824609.5157387, "event": "decision", "action": "hold", "confidence": 0.96, "reason": "The balloon is low and moving toward the edge of view, outside the described upward reach.", "latency_s": 2.06}
+{"time": 1793824609.5810905, "event": "hold", "reason": "decision based on stale image"}
+{"time": 1793824643.8119862, "event": "finished"}

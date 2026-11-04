@@ -1,0 +1,128 @@
+{"time": 1793824993.6626377, "event": "prepared", "backend": "robot", "policy": "astra", "model": "gpt-6.1-terra", "pause_world": false, "walk": false, "follow": false, "task_name": "catch_balloon", "task": "Reach toward the red balloon whenever you can see it. In simulation, a red sphere\nrepresents the balloon.\nFor this task the balloon counts as within reach whenever any part of it is visible\nin the ego camera: on the floor, low, far away, partly hidden or at the edge of the\nimage. The reach does not have to touch it; it points the arms toward it.\nChoose the arm by where the balloon is in the image: reach_left when it is in the\nleft part of the image (the robot's left), reach_right when it is in the right part,\nreach_both when it is near the middle.\nHold only when no red balloon is visible, or when a person's body is within arm's\nlength in front of the robot, where a reach could hit them.\nThe camera cannot see behind the robot; never assume that unseen space is clear.\nThe available actions are bounded arm reaches with stationary feet; they do not\nclose fingers or provide a guaranteed grasp.", "max_decisions": 500, "max_decision_age": 3.0}
+{"time": 1793825002.7713547, "event": "camera_confirmed", "camera": "ego_view"}
+{"time": 1793825002.771567, "event": "observation", "preflight": true, "images": ["frames/0001_preflight_0.jpg", "frames/0001_preflight_1.jpg"]}
+{"time": 1793825004.5824416, "event": "preflight_response", "action": "hold", "confidence": 1.0, "reason": "Preflight connectivity test; no motion.", "latency_s": 1.811}
+{"time": 1793825028.2194645, "event": "suspended_checks_passed", "detail": "Joint error 0.215503 rad / 0.30; speed 0.02057 rad/s / 0.30; settled 2.05003 s / 2.0"}
+{"time": 1793825056.4331074, "event": "command_ack", "command": "grounded_start", "argument": 0, "sequence": 1}
+{"time": 1793825056.4338653, "event": "standing_reference_active"}
+{"time": 1793825056.4343848, "event": "observation", "preflight": false, "images": ["frames/0002_decision_0.jpg", "frames/0002_decision_1.jpg"]}
+{"time": 1793825057.6627035, "event": "decision", "action": "hold", "confidence": 0.99, "reason": "No red balloon is visible.", "latency_s": 1.228}
+{"time": 1793825057.6767101, "event": "hold", "reason": "No red balloon is visible."}
+{"time": 1793825057.9303205, "event": "observation", "preflight": false, "images": ["frames/0003_decision_0.jpg", "frames/0003_decision_1.jpg"]}
+{"time": 1793825059.2169826, "event": "decision", "action": "hold", "confidence": 0.99, "reason": "No red balloon is visible.", "latency_s": 1.286}
+{"time": 1793825059.2564754, "event": "hold", "reason": "No red balloon is visible."}
+{"time": 1793825059.512215, "event": "observation", "preflight": false, "images": ["frames/0004_decision_0.jpg", "frames/0004_decision_1.jpg"]}
+{"time": 1793825060.7772942, "event": "decision", "action": "hold", "confidence": 0.99, "reason": "No red balloon is visible.", "latency_s": 1.265}
+{"time": 1793825060.77885, "event": "hold", "reason": "No red balloon is visible."}
+{"time": 1793825061.043221, "event": "observation", "preflight": false, "images": ["frames/0005_decision_0.jpg", "frames/0005_decision_1.jpg"]}
+{"time": 1793825062.4481575, "event": "decision", "action": "hold", "confidence": 0.99, "reason": "No red balloon is visible.", "latency_s": 1.405}
+{"time": 1793825062.4551988, "event": "hold", "reason": "No red balloon is visible."}
+{"time": 1793825062.7249753, "event": "observation", "preflight": false, "images": ["frames/0006_decision_0.jpg", "frames/0006_decision_1.jpg"]}
+{"time": 1793825064.021156, "event": "decision", "action": "hold", "confidence": 0.99, "reason": "No red balloon is visible.", "latency_s": 1.296}
+{"time": 1793825064.027973, "event": "hold", "reason": "No red balloon is visible."}
+{"time": 1793825064.2856581, "event": "observation", "preflight": false, "images": ["frames/0007_decision_0.jpg", "frames/0007_decision_1.jpg"]}
+{"time": 1793825066.2786636, "event": "decision", "action": "hold", "confidence": 0.98, "reason": "The balloon is no longer visible in the latest frame.", "latency_s": 1.993}
+{"time": 1793825066.3026648, "event": "hold", "reason": "The balloon is no longer visible in the latest frame."}
+{"time": 1793825066.5596335, "event": "observation", "preflight": false, "images": ["frames/0008_decision_0.jpg", "frames/0008_decision_1.jpg"]}
+{"time": 1793825068.1505675, "event": "decision", "action": "hold", "confidence": 0.99, "reason": "No red balloon is visible, and people are nearby.", "latency_s": 1.591}
+{"time": 1793825068.1719177, "event": "hold", "reason": "No red balloon is visible, and people are nearby."}
+{"time": 1793825068.4447167, "event": "observation", "preflight": false, "images": ["frames/0009_decision_0.jpg", "frames/0009_decision_1.jpg"]}
+{"time": 1793825070.7152162, "event": "decision", "action": "hold", "confidence": 0.91, "reason": "A person is close in front of the robot, where a reach could hit them.", "latency_s": 2.27}
+{"time": 1793825070.7429087, "event": "hold", "reason": "A person is close in front of the robot, where a reach could hit them."}
+{"time": 1793825071.0391114, "event": "observation", "preflight": false, "images": ["frames/0010_decision_0.jpg", "frames/0010_decision_1.jpg"]}
+{"time": 1793825072.6649606, "event": "decision", "action": "hold", "confidence": 0.97, "reason": "A person is close in front of the robot, beside the visible balloon.", "latency_s": 1.625}
+{"time": 1793825072.6784565, "event": "hold", "reason": "A person is close in front of the robot, beside the visible balloon."}
+{"time": 1793825073.0065613, "event": "observation", "preflight": false, "images": ["frames/0011_decision_0.jpg", "frames/0011_decision_1.jpg"]}
+{"time": 1793825074.3564906, "event": "decision", "action": "hold", "confidence": 0.99, "reason": "No red balloon is visible.", "latency_s": 1.35}
+{"time": 1793825074.377429, "event": "hold", "reason": "No red balloon is visible."}
+{"time": 1793825074.6367166, "event": "observation", "preflight": false, "images": ["frames/0012_decision_0.jpg", "frames/0012_decision_1.jpg"]}
+{"time": 1793825076.144105, "event": "decision", "action": "hold", "confidence": 0.99, "reason": "No red balloon is visible.", "latency_s": 1.507}
+{"time": 1793825076.1494873, "event": "hold", "reason": "No red balloon is visible."}
+{"time": 1793825076.4509127, "event": "observation", "preflight": false, "images": ["frames/0013_decision_0.jpg", "frames/0013_decision_1.jpg"]}
+{"time": 1793825077.825954, "event": "decision", "action": "hold", "confidence": 0.99, "reason": "No red balloon is visible.", "latency_s": 1.375}
+{"time": 1793825077.8349605, "event": "hold", "reason": "No red balloon is visible."}
+{"time": 1793825078.1204505, "event": "observation", "preflight": false, "images": ["frames/0014_decision_0.jpg", "frames/0014_decision_1.jpg"]}
+{"time": 1793825079.5886226, "event": "decision", "action": "hold", "confidence": 0.99, "reason": "No red balloon is visible.", "latency_s": 1.468}
+{"time": 1793825079.606251, "event": "hold", "reason": "No red balloon is visible."}
+{"time": 1793825079.8772788, "event": "observation", "preflight": false, "images": ["frames/0015_decision_0.jpg", "frames/0015_decision_1.jpg"]}
+{"time": 1793825081.4711292, "event": "decision", "action": "hold", "confidence": 0.99, "reason": "No red balloon is visible, and a person is in front of the robot.", "latency_s": 1.594}
+{"time": 1793825081.4979157, "event": "hold", "reason": "No red balloon is visible, and a person is in front of the robot."}
+{"time": 1793825081.7513893, "event": "observation", "preflight": false, "images": ["frames/0016_decision_0.jpg", "frames/0016_decision_1.jpg"]}
+{"time": 1793825083.704996, "event": "decision", "action": "hold", "confidence": 0.99, "reason": "No red balloon is visible, and a person is directly in front of the robot.", "latency_s": 1.953}
+{"time": 1793825083.71571, "event": "hold", "reason": "No red balloon is visible, and a person is directly in front of the robot."}
+{"time": 1793825083.985658, "event": "observation", "preflight": false, "images": ["frames/0017_decision_0.jpg", "frames/0017_decision_1.jpg"]}
+{"time": 1793825085.4858286, "event": "decision", "action": "hold", "confidence": 0.99, "reason": "A person is directly in front of the robot within arm's reach.", "latency_s": 1.5}
+{"time": 1793825085.5243194, "event": "hold", "reason": "A person is directly in front of the robot within arm's reach."}
+{"time": 1793825085.7951016, "event": "observation", "preflight": false, "images": ["frames/0018_decision_0.jpg", "frames/0018_decision_1.jpg"]}
+{"time": 1793825087.4488208, "event": "decision", "action": "hold", "confidence": 0.99, "reason": "A person is directly in front of the robot, with their arms next to the balloon.", "latency_s": 1.653}
+{"time": 1793825087.4555986, "event": "hold", "reason": "A person is directly in front of the robot, with their arms next to the balloon."}
+{"time": 1793825087.726441, "event": "observation", "preflight": false, "images": ["frames/0019_decision_0.jpg", "frames/0019_decision_1.jpg"]}
+{"time": 1793825089.384858, "event": "decision", "action": "reach_both", "confidence": 0.99, "reason": "The red balloon is visible near the middle, with no person in front.", "latency_s": 1.658}
+{"time": 1793825089.4774587, "event": "command_ack", "command": "motion", "argument": 1, "sequence": 2}
+{"time": 1793825093.0963786, "event": "observation", "preflight": false, "images": ["frames/0020_decision_0.jpg", "frames/0020_decision_1.jpg"]}
+{"time": 1793825094.7932143, "event": "decision", "action": "reach_both", "confidence": 0.98, "reason": "The red balloon is visible near the middle, with no person in reach.", "latency_s": 1.697}
+{"time": 1793825094.8813596, "event": "command_ack", "command": "motion", "argument": 1, "sequence": 3}
+{"time": 1793825098.5688822, "event": "observation", "preflight": false, "images": ["frames/0021_decision_0.jpg", "frames/0021_decision_1.jpg"]}
+{"time": 1793825100.2541707, "event": "decision", "action": "reach_both", "confidence": 0.99, "reason": "The red balloon is visible near the middle, with no person within arm's length.", "latency_s": 1.685}
+{"time": 1793825100.3507125, "event": "command_ack", "command": "motion", "argument": 1, "sequence": 4}
+{"time": 1793825104.0600936, "event": "observation", "preflight": false, "images": ["frames/0022_decision_0.jpg", "frames/0022_decision_1.jpg"]}
+{"time": 1793825106.2071145, "event": "decision", "action": "hold", "confidence": 0.95, "reason": "A person is close to the robot and could be hit by a reach.", "latency_s": 2.147}
+{"time": 1793825106.208263, "event": "hold", "reason": "A person is close to the robot and could be hit by a reach."}
+{"time": 1793825106.489291, "event": "observation", "preflight": false, "images": ["frames/0023_decision_0.jpg", "frames/0023_decision_1.jpg"]}
+{"time": 1793825108.3351564, "event": "decision", "action": "hold", "confidence": 0.99, "reason": "A person is within arm's reach next to the balloon.", "latency_s": 1.846}
+{"time": 1793825108.3423467, "event": "hold", "reason": "A person is within arm's reach next to the balloon."}
+{"time": 1793825108.5990834, "event": "observation", "preflight": false, "images": ["frames/0024_decision_0.jpg", "frames/0024_decision_1.jpg"]}
+{"time": 1793825110.6236546, "event": "decision", "action": "hold", "confidence": 0.99, "reason": "A person is within arm's reach in front of the robot.", "latency_s": 2.024}
+{"time": 1793825110.6247704, "event": "hold", "reason": "A person is within arm's reach in front of the robot."}
+{"time": 1793825110.8909194, "event": "observation", "preflight": false, "images": ["frames/0025_decision_0.jpg", "frames/0025_decision_1.jpg"]}
+{"time": 1793825113.0252593, "event": "decision", "action": "hold", "confidence": 0.99, "reason": "No red balloon is visible, and a person is close in front.", "latency_s": 2.134}
+{"time": 1793825113.0324311, "event": "hold", "reason": "No red balloon is visible, and a person is close in front."}
+{"time": 1793825113.291698, "event": "observation", "preflight": false, "images": ["frames/0026_decision_0.jpg", "frames/0026_decision_1.jpg"]}
+{"time": 1793825115.18646, "event": "decision", "action": "hold", "confidence": 0.9, "reason": "A person is close in front on the robot's right, within reach.", "latency_s": 1.895}
+{"time": 1793825115.1977615, "event": "hold", "reason": "A person is close in front on the robot's right, within reach."}
+{"time": 1793825115.486293, "event": "observation", "preflight": false, "images": ["frames/0027_decision_0.jpg", "frames/0027_decision_1.jpg"]}
+{"time": 1793825117.5386074, "event": "decision", "action": "hold", "confidence": 0.98, "reason": "A person's hand is immediately above the balloon and could be hit by a reach.", "latency_s": 2.052}
+{"time": 1793825117.5505748, "event": "hold", "reason": "A person's hand is immediately above the balloon and could be hit by a reach."}
+{"time": 1793825117.8267455, "event": "observation", "preflight": false, "images": ["frames/0028_decision_0.jpg", "frames/0028_decision_1.jpg"]}
+{"time": 1793825119.5433605, "event": "decision", "action": "hold", "confidence": 0.98, "reason": "A person's hand is immediately above the balloon and could be hit by a reach.", "latency_s": 1.716}
+{"time": 1793825119.575657, "event": "hold", "reason": "A person's hand is immediately above the balloon and could be hit by a reach."}
+{"time": 1793825119.8534203, "event": "observation", "preflight": false, "images": ["frames/0029_decision_0.jpg", "frames/0029_decision_1.jpg"]}
+{"time": 1793825122.0612028, "event": "decision", "action": "hold", "confidence": 0.95, "reason": "A person's hand is close to the balloon and within the reach path.", "latency_s": 2.208}
+{"time": 1793825122.0713196, "event": "hold", "reason": "A person's hand is close to the balloon and within the reach path."}
+{"time": 1793825122.334219, "event": "observation", "preflight": false, "images": ["frames/0030_decision_0.jpg", "frames/0030_decision_1.jpg"]}
+{"time": 1793825124.9058778, "event": "decision", "action": "reach_left", "confidence": 0.91, "reason": "The red balloon is visible on the left.", "latency_s": 2.572}
+{"time": 1793825124.950038, "event": "command_ack", "command": "motion", "argument": 2, "sequence": 5}
+{"time": 1793825128.6662178, "event": "observation", "preflight": false, "images": ["frames/0031_decision_0.jpg", "frames/0031_decision_1.jpg"]}
+{"time": 1793825130.5643332, "event": "decision", "action": "reach_both", "confidence": 0.95, "reason": "The red balloon is visible near the middle of the image.", "latency_s": 1.898}
+{"time": 1793825130.627607, "event": "command_ack", "command": "motion", "argument": 1, "sequence": 6}
+{"time": 1793825134.26263, "event": "observation", "preflight": false, "images": ["frames/0032_decision_0.jpg", "frames/0032_decision_1.jpg"]}
+{"time": 1793825136.3167727, "event": "decision", "action": "reach_right", "confidence": 0.9, "reason": "The red balloon is visible just right of center.", "latency_s": 2.054}
+{"time": 1793825136.471798, "event": "command_ack", "command": "motion", "argument": 3, "sequence": 7}
+{"time": 1793825140.0695877, "event": "observation", "preflight": false, "images": ["frames/0033_decision_0.jpg", "frames/0033_decision_1.jpg"]}
+{"time": 1793825141.855073, "event": "decision", "action": "reach_right", "confidence": 0.99, "reason": "The red balloon is visible on the right, with no person in reach.", "latency_s": 1.785}
+{"time": 1793825141.9483044, "event": "command_ack", "command": "motion", "argument": 3, "sequence": 8}
+{"time": 1793825145.6633472, "event": "observation", "preflight": false, "images": ["frames/0034_decision_0.jpg", "frames/0034_decision_1.jpg"]}
+{"time": 1793825147.574385, "event": "decision", "action": "reach_right", "confidence": 0.99, "reason": "The red balloon is visible on the right, with no person in front.", "latency_s": 1.911}
+{"time": 1793825147.618149, "event": "command_ack", "command": "motion", "argument": 3, "sequence": 9}
+{"time": 1793825151.2864885, "event": "observation", "preflight": false, "images": ["frames/0035_decision_0.jpg", "frames/0035_decision_1.jpg"]}
+{"time": 1793825152.9674885, "event": "decision", "action": "reach_right", "confidence": 0.99, "reason": "The red balloon is visible on the right, with no person directly in front.", "latency_s": 1.681}
+{"time": 1793825153.0413496, "event": "command_ack", "command": "motion", "argument": 3, "sequence": 10}
+{"time": 1793825156.6912844, "event": "observation", "preflight": false, "images": ["frames/0036_decision_0.jpg", "frames/0036_decision_1.jpg"]}
+{"time": 1793825158.7583454, "event": "decision", "action": "reach_right", "confidence": 0.99, "reason": "The red balloon is visible on the right; no person is visible within arm's reach.", "latency_s": 2.067}
+{"time": 1793825158.820603, "event": "command_ack", "command": "motion", "argument": 3, "sequence": 11}
+{"time": 1793825162.4921227, "event": "observation", "preflight": false, "images": ["frames/0037_decision_0.jpg", "frames/0037_decision_1.jpg"]}
+{"time": 1793825164.184063, "event": "decision", "action": "reach_left", "confidence": 0.99, "reason": "The red balloon is visible on the left; no person is in front.", "latency_s": 1.692}
+{"time": 1793825164.2978153, "event": "command_ack", "command": "motion", "argument": 2, "sequence": 12}
+{"time": 1793825167.9251938, "event": "observation", "preflight": false, "images": ["frames/0038_decision_0.jpg", "frames/0038_decision_1.jpg"]}
+{"time": 1793825169.9198833, "event": "decision", "action": "reach_right", "confidence": 0.95, "reason": "The balloon is visible in the right part of the latest image.", "latency_s": 1.995}
+{"time": 1793825169.9964838, "event": "command_ack", "command": "motion", "argument": 3, "sequence": 13}
+{"time": 1793825173.6697063, "event": "observation", "preflight": false, "images": ["frames/0039_decision_0.jpg", "frames/0039_decision_1.jpg"]}
+{"time": 1793825175.3039315, "event": "decision", "action": "reach_right", "confidence": 0.99, "reason": "The red balloon is visible on the right, with no person in front.", "latency_s": 1.634}
+{"time": 1793825175.3674343, "event": "command_ack", "command": "motion", "argument": 3, "sequence": 14}
+{"time": 1793825179.0885713, "event": "observation", "preflight": false, "images": ["frames/0040_decision_0.jpg", "frames/0040_decision_1.jpg"]}
+{"time": 1793825180.4908862, "event": "decision", "action": "hold", "confidence": 0.99, "reason": "No red balloon is visible.", "latency_s": 1.402}
+{"time": 1793825180.5001445, "event": "hold", "reason": "No red balloon is visible."}
+{"time": 1793825180.7520137, "event": "observation", "preflight": false, "images": ["frames/0041_decision_0.jpg", "frames/0041_decision_1.jpg"]}
+{"time": 1793825182.429577, "event": "decision", "action": "hold", "confidence": 0.99, "reason": "No red balloon is visible.", "latency_s": 1.677}
+{"time": 1793825182.4402583, "event": "hold", "reason": "No red balloon is visible."}
+{"time": 1793825182.7156322, "event": "observation", "preflight": false, "images": ["frames/0042_decision_0.jpg", "frames/0042_decision_1.jpg"]}
