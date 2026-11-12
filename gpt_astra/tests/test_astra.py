@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 import threading
 import time
 import unittest
@@ -22,10 +23,13 @@ sys.path.insert(0, str(ROOT))
 from gpt_astra.camera import Frame, Frames, MockCamera, ZmqCamera, jpeg_thumbnail
 from gpt_astra.motions import prepare_session, ready_pose
 from gpt_astra.tasks.catch_balloon.motions import generate_library
-from gpt_astra.policy import Astra, Decision, validate_decision
+from gpt_astra.policy import Astra, ClaudeCode, Decision, FakePolicy, RelayPolicy, validate_decision
+from gpt_astra.calibration import SIM
+from gpt_astra.follow import approach_x
 from gpt_astra.run import MockSession, Runner, decision_allowed, parse_args
 from sonic_laptop.model import load_model, clearance
 from sonic_laptop.motions import read_clip
+from sonic_laptop.session import Session
 
 UPSTREAM = ROOT.parent / "GR00T-WholeBodyControl"
 
@@ -149,6 +153,116 @@ class PolicyTests(unittest.TestCase):
         self.assertFalse(decision_allowed(Decision("tap_left_small", .1, "x"), 10, 11, state, 2, .8)[0])
 
 
+class ClaudeCodeTests(unittest.TestCase):
+    """Fake `claude` executable: records argv/stdin/env and replies with stream-json events."""
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.directory = Path(self.tmp.name)
+        self.executable = self.directory / "claude"
+        self.actions = {"reach_left": "left", "hold": "wait"}
+        self.frames = [Frame(b"jpeg-old", 1.0, "ego"), Frame(b"jpeg-new", 1.5, "ego")]
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def fake(self, events, code=0, auth=None):
+        if auth is None:
+            auth = {"loggedIn": True, "authMethod": "claude.ai", "apiProvider": "firstParty"}
+        record = self.directory / "record.json"
+        self.executable.write_text(f"""#!{sys.executable}
+import json, os, sys
+if sys.argv[1:] == ["auth", "status"]:
+    print(json.dumps({auth!r}))
+    sys.exit(0)
+json.dump({{"argv": sys.argv[1:], "stdin": sys.stdin.read(), "cwd": os.getcwd(),
+           "billing_env": sorted(k for k in os.environ if k.startswith(("ANTHROPIC_", "CLAUDE_CODE_USE_")))}},
+          open({str(record)!r}, "w"))
+for event in {events!r}:
+    print(json.dumps(event))
+sys.exit({code})
+""")
+        self.executable.chmod(0o755)
+        return record
+
+    def decide(self):
+        billing = {"ANTHROPIC_API_KEY": "not-a-secret", "ANTHROPIC_BASE_URL": "http://gateway.invalid",
+                   "CLAUDE_CODE_USE_BEDROCK": "1"}
+        with patch.dict(os.environ, billing):
+            return ClaudeCode(self.actions, model="haiku", executable=str(self.executable)).decide(
+                "catch", self.frames, {"preflight": False})
+
+    def test_payload_flags_and_structured_decision(self):
+        record = self.fake([{"type": "system", "subtype": "init", "apiKeySource": "none"},
+                            {"type": "result", "is_error": False, "structured_output":
+                             {"action": "reach_left", "confidence": .9, "reason": "visible"}}])
+        self.assertEqual(self.decide(), Decision("reach_left", .9, "visible"))
+        sent = json.loads(record.read_text())
+        self.assertEqual(sent["billing_env"], [])
+        self.assertNotEqual(Path(sent["cwd"]).resolve(), ROOT)
+        argv = sent["argv"]
+        for flag in ("-p", "--safe-mode", "--no-session-persistence"):
+            self.assertIn(flag, argv)
+        self.assertEqual(argv[argv.index("--tools") + 1], "")
+        self.assertEqual(argv[argv.index("--model") + 1], "haiku")
+        schema = json.loads(argv[argv.index("--json-schema") + 1])
+        self.assertEqual(schema["properties"]["action"]["enum"], ["reach_left", "hold"])
+        self.assertEqual(schema["properties"]["reason"]["maxLength"], 500)
+        content = json.loads(sent["stdin"])["message"]["content"]
+        self.assertEqual(json.loads(content[0]["text"])["available_actions"], self.actions)
+        self.assertEqual([base64.b64decode(c["source"]["data"]) for c in content[1:]],
+                         [b"jpeg-old", b"jpeg-new"])
+
+    def test_api_key_billing_error_and_invalid_output_never_create_command(self):
+        result = {"type": "result", "is_error": False, "structured_output":
+                  {"action": "reach_left", "confidence": .9, "reason": "visible"}}
+        for auth in ({"loggedIn": True, "authMethod": "api_key", "apiProvider": "firstParty"},
+                     {"loggedIn": True, "authMethod": "claude.ai", "apiProvider": "bedrock"}, {}):
+            record = self.fake([result], auth=auth)
+            with self.assertRaisesRegex(RuntimeError, "not logged in"):
+                self.decide()
+            self.assertFalse(record.exists())
+        self.fake([{"type": "system", "subtype": "init", "apiKeySource": "ANTHROPIC_API_KEY"}, result])
+        with self.assertRaisesRegex(RuntimeError, "not the subscription"):
+            self.decide()
+        init = {"type": "system", "subtype": "init", "apiKeySource": "none"}
+        for events, code in (([init, {**result, "is_error": True}], 0), ([init, result], 1), ([init], 0),
+                             ([init, {**result, "structured_output": {"action": "walk", "confidence": 1,
+                                                                     "reason": ""}}], 0)):
+            self.fake(events, code)
+            with self.assertRaises(ValueError):
+                self.decide()
+
+
+class RelayPolicyTests(unittest.TestCase):
+    def test_request_file_reply_error_and_timeout(self):
+        frames = [Frame(b"jpeg", 1.0, "ego")]
+        with tempfile.TemporaryDirectory() as tmp:
+            relay = Path(tmp)
+            policy = RelayPolicy({"catch": "c", "hold": "h"}, relay, timeout=5)
+            def answer(reply):
+                for _ in range(250):
+                    pending = list((relay / "requests").glob("[0-9]*.json"))
+                    if pending:
+                        break
+                    time.sleep(.02)
+                request = json.loads(pending[0].read_text())
+                pending[0].unlink()
+                self.assertEqual(base64.b64decode(request["frames"][0]["jpeg"]), b"jpeg")
+                self.assertEqual(request["actions"], {"catch": "c", "hold": "h"})
+                (relay / "decisions" / pending[0].name).write_text(json.dumps(reply))
+            for reply in ({"decision": {"action": "catch", "confidence": .9, "reason": "r"}}, {"error": "boom"}):
+                worker = threading.Thread(target=answer, args=(reply,))
+                worker.start()
+                if "error" in reply:
+                    with self.assertRaisesRegex(RuntimeError, "boom"):
+                        policy.decide("task", frames, {})
+                else:
+                    self.assertEqual(policy.decide("task", frames, {}), Decision("catch", .9, "r"))
+                worker.join()
+            with self.assertRaisesRegex(RuntimeError, "timed out"):
+                RelayPolicy({"hold": "h"}, relay / "quiet", timeout=.3).decide("task", frames, {})
+
+
 class MotionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -247,6 +361,44 @@ class CameraTests(unittest.TestCase):
             context.term()
 
 
+    def test_robot_camera_red_arrives_red_after_the_swap(self):
+        import msgpack
+        import zmq
+        # The robot's server JPEG-encodes an RGB array with OpenCV (which takes it for BGR): a red balloon is stored
+        # in the JPEG's blue channel.
+        robot_jpeg = jpeg_thumbnail(Image.new("RGB", (30, 40), (10, 20, 220)))
+        context = zmq.Context()
+        publisher = context.socket(zmq.PUB)
+        port = publisher.bind_to_random_port("tcp://127.0.0.1")
+        cameras = {True: ZmqCamera("127.0.0.1", port, "ego_view", swap_red_blue=True),
+                   False: ZmqCamera("127.0.0.1", port, "ego_view")}
+        try:
+            time.sleep(.2)
+            message = {"timestamps": {"ego_view": time.time()},
+                       "images": {"ego_view": base64.b64encode(robot_jpeg).decode()}}
+            for _ in range(20):
+                publisher.send(msgpack.packb(message, use_bin_type=True))
+                time.sleep(.01)
+                for camera in cameras.values():
+                    camera.poll()
+                if all(camera.history for camera in cameras.values()):
+                    break
+            colours = {swap: Image.open(io.BytesIO(camera.history[-1].jpeg)).convert("RGB").getpixel((15, 20))
+                       for swap, camera in cameras.items()}
+            self.assertGreater(colours[True][0], 180)       # red, as the balloon really is
+            self.assertLess(colours[True][2], 60)
+            self.assertGreater(colours[False][2], 180)      # without the swap: blue
+        finally:
+            for camera in cameras.values():
+                camera.close()
+            publisher.close(linger=0)
+            context.term()
+        self.assertFalse(parse_args(["--policy", "fake", "--auto-confirm"]).camera_swap_red_blue)
+        with tempfile.TemporaryDirectory() as tmp:
+            robot = ["--backend", "robot", "--interface", "enp3s0", "--prepare-only", tmp + "/library"]
+            self.assertTrue(parse_args(robot).camera_swap_red_blue)
+            self.assertFalse(parse_args(robot + ["--no-camera-swap-red-blue"]).camera_swap_red_blue)
+
 class ConfigurationTests(unittest.TestCase):
     def test_model_default_environment_and_cli_precedence(self):
         with patch.dict(os.environ, {}, clear=True):
@@ -262,9 +414,16 @@ class ConfigurationTests(unittest.TestCase):
 
 class IntegrationTests(unittest.TestCase):
     def test_hardware_cannot_bypass_gates_or_use_fake_policy(self):
-        for extra in (["--auto-confirm"], ["--policy", "fake"], ["--image", "x.jpg"]):
+        for extra in (["--auto-confirm"], ["--policy", "fake"], ["--image", "x.jpg"], ["--policy", "claude"],
+                      ["--pause-world"], ["--walk"]):
             with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
                 parse_args(["--backend", "robot", "--interface", "eth0", *extra])
+        self.assertEqual(parse_args(["--policy", "claude", "--auto-confirm"]).api_timeout, 60)
+        self.assertEqual(parse_args(["--auto-confirm"]).api_timeout, 15)
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            parse_args(["--backend", "robot", "--interface", "eth0", "--policy", "relay", "--relay-dir", "x"])
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            parse_args(["--policy", "relay", "--auto-confirm"])
 
     def test_complete_app_through_real_http_and_mock_sonic_ipc(self):
         fixture = ApiFixture()
@@ -321,6 +480,204 @@ class IntegrationTests(unittest.TestCase):
                     runner.cleanup()
         finally:
             fixture.close()
+
+    def test_walk_primitives_through_planner_then_back_to_reach_clips(self):
+        args = parse_args(["--backend", "mock", "--policy", "fake", "--auto-confirm", "--walk",
+                           "--task-name", "approach_balloon", "--max-decisions", "8"])
+        with tempfile.TemporaryDirectory() as tmp, patch("gpt_astra.run.RUNTIME", Path(tmp)), \
+             redirect_stdout(io.StringIO()):
+            runner = Runner(args)
+            try:
+                runner.run()
+                events = [json.loads(line) for line in (runner.directory / "events.jsonl").read_text().splitlines()]
+                decisions = [e["action"] for e in events if e["event"] == "decision"]
+                self.assertEqual(decisions, ["reach_left", "reach_right", "reach_both", "walk_forward",
+                                             "walk_backward", "step_left", "step_right", "reach_left"])
+                self.assertEqual([e["action"] for e in events if e["event"] == "walk"], decisions[3:7])
+                acks = [e["command"] for e in events if e["event"] == "command_ack"]
+                self.assertEqual(acks, ["grounded_start", "motion", "motion", "motion", "planner", "idle",
+                                        "idle", "idle", "idle", "reference", "motion"])
+                self.assertEqual(events[-1]["event"], "finished")
+            finally:
+                runner.cleanup()
+
+    def test_follow_loop_walks_grabs_holds_and_releases(self):
+        args = parse_args(["--backend", "mock", "--policy", "fake", "--auto-confirm", "--follow",
+                           "--task-name", "follow_balloon", "--follow-seconds", "14", "--max-decisions", "1000"])
+        start = []
+        def ball(jpeg, cal=None, held=False):
+            start.append(time.monotonic())
+            elapsed = start[-1] - start[0]
+            if elapsed < 2:
+                return np.array([.8, .2, .16])   # to the left: side-step left first
+            if elapsed < 7:
+                # In the approach zone and, as the mock robot does not settle back, already within a grab's reach.
+                return np.array([approach_x(SIM) + SIM.settle_back / 2, 0., .16])
+            return np.array([.9, -.3, .16])      # pulled away
+        catch = Decision("catch", 1, "fixture: go after the balloon")
+        with tempfile.TemporaryDirectory() as tmp, patch("gpt_astra.run.RUNTIME", Path(tmp)), \
+             patch("gpt_astra.run.locate", ball), patch.object(FakePolicy, "decide", return_value=catch), \
+             redirect_stdout(io.StringIO()):
+            runner = Runner(args)
+            runner.record_camera = True                   # as on the robot
+            commands = []
+            try:
+                with patch.object(MockSession, "command", autospec=True,
+                                  side_effect=lambda session, command, argument=0: commands.append(
+                                      (command, argument)) or Session.command(session, command, argument)):
+                    runner.run()
+                events = [json.loads(line) for line in (runner.directory / "events.jsonl").read_text().splitlines()]
+                self.assertTrue(all(e["action"] == "catch" for e in events if e["event"] == "decision"))
+                self.assertEqual([e["reason"] for e in events if e["event"] == "let_go"], ["pulled out of the hands"])
+                moves = [argument for command, argument in commands if command == "move"]
+                self.assertEqual(moves[0], 2)
+                self.assertEqual(moves[-1], 3)             # follows the pulled balloon to the right
+                acks = [e["command"] for e in events if e["event"] == "command_ack"]
+                self.assertEqual(acks[:6], ["grounded_start", "planner", "idle", "reference", "motion", "motion"])
+                self.assertEqual(acks[6], "planner")
+                # Everything needed to reconstruct the run: follower ticks, controller modes, every camera frame,
+                # and the latency of each decision.
+                trace = [json.loads(line) for line in (runner.directory / "trace.jsonl").read_text().splitlines()]
+                kinds = {e["event"] for e in trace}
+                self.assertTrue({"follow", "controller", "camera"} <= kinds, kinds)
+                ticks = [e for e in trace if e["event"] == "follow"]
+                self.assertEqual({e["mode"] for e in ticks}, {"follow", "hold"})
+                self.assertTrue(any(e["step"] and e["step"]["direction"] == 2 for e in ticks))
+                cameras = [e for e in trace if e["event"] == "camera"]
+                self.assertTrue(all((runner.directory / e["image"]).is_file() for e in cameras))
+                self.assertTrue(all("latency_s" in e for e in events if e["event"] == "decision"))
+            finally:
+                runner.cleanup()
+
+    def test_robot_recorder_start_keeps_the_camera_fresh(self):
+        # The preflight right after it needs a frame <0.5 s old: waiting for the recorder must keep reading the camera.
+        args = parse_args(["--policy", "fake", "--auto-confirm"])
+        args.backend, args.interface = "robot", "enp3s0"
+        runner, pumps = Runner(args), []
+        runner.pump = lambda camera_required=False, tolerate_fault=False: pumps.append((time.monotonic(), camera_required))
+        process = SimpleNamespace(poll=lambda: None)
+        with tempfile.TemporaryDirectory() as tmp, patch("gpt_astra.run.subprocess.Popen", return_value=process) as popen, \
+             redirect_stdout(io.StringIO()):
+            runner.directory = Path(tmp)
+            runner.events = (runner.directory / "events.jsonl").open("w")
+            runner.start_recorder()
+            runner.recorder_log.close()
+            runner.events.close()
+        self.assertIn("gpt_astra.tools.record_lowstate", popen.call_args[0][0])
+        self.assertTrue(all(required for _, required in pumps))
+        self.assertLess(max(b[0] - a[0] for a, b in zip(pumps, pumps[1:])), .2)
+
+    def test_follow_pauses_standing_when_the_policy_keeps_failing(self):
+        args = parse_args(["--backend", "mock", "--policy", "fake", "--auto-confirm", "--follow",
+                           "--task-name", "follow_balloon", "--follow-seconds", "30", "--max-decisions", "1000"])
+        with tempfile.TemporaryDirectory() as tmp, patch("gpt_astra.run.RUNTIME", Path(tmp)), \
+             patch("gpt_astra.run.locate", lambda jpeg, cal=None, held=False: np.array([.9, 0., .16])), \
+             patch.object(FakePolicy, "decide", side_effect=[Decision("hold", 1, "preflight"),
+                                                             RuntimeError("Claude Code timed out"),
+                                                             RuntimeError("Claude Code timed out")]), \
+             redirect_stdout(io.StringIO()):
+            runner = Runner(args)
+            try:
+                runner.run()
+                events = [json.loads(line) for line in (runner.directory / "events.jsonl").read_text().splitlines()]
+                names = [e["event"] for e in events]
+                self.assertEqual(names.count("policy_error"), 2)
+                self.assertIn("policy_pause", names)
+                self.assertEqual(names[-1], "finished")   # the normal end: supported, then stopped; no damping
+            finally:
+                runner.cleanup()
+
+    def test_follow_pauses_standing_when_the_camera_goes_stale(self):
+        args = parse_args(["--backend", "mock", "--policy", "fake", "--auto-confirm", "--follow",
+                           "--task-name", "follow_balloon", "--follow-seconds", "30", "--max-decisions", "1000"])
+        stale_after = []
+        def fresh_frames(runner):
+            if not stale_after:
+                stale_after.append(time.monotonic() + 3)
+            return None if time.monotonic() > stale_after[0] else Frames.latest(runner.camera)
+        with tempfile.TemporaryDirectory() as tmp, patch("gpt_astra.run.RUNTIME", Path(tmp)), \
+             patch("gpt_astra.run.locate", lambda jpeg, cal=None, held=False: np.array([.9, 0., .16])), \
+             patch.object(Runner, "fresh_frames", autospec=True, side_effect=fresh_frames), \
+             patch("gpt_astra.run.START_SETTLE", .5), redirect_stdout(io.StringIO()):
+            runner = Runner(args)
+            try:
+                runner.run()
+                events = [json.loads(line) for line in (runner.directory / "events.jsonl").read_text().splitlines()]
+                pauses = [e["reason"] for e in events if e["event"] == "policy_pause"]
+                self.assertEqual(len(pauses), 1)
+                self.assertIn("camera stale", pauses[0])
+                self.assertEqual(events[-1]["event"], "finished")
+            finally:
+                runner.cleanup()
+
+    def test_follow_refuses_a_task_without_the_grab_poses(self):
+        args = parse_args(["--backend", "mock", "--policy", "fake", "--auto-confirm", "--follow",
+                           "--task-name", "catch_balloon"])
+        with tempfile.TemporaryDirectory() as tmp, patch("gpt_astra.run.RUNTIME", Path(tmp)), \
+             redirect_stdout(io.StringIO()):
+            runner = Runner(args)
+            try:
+                with self.assertRaisesRegex(ValueError, "grab poses"):
+                    runner.run()
+                self.assertIsNone(runner.session)   # refused before any controller started
+            finally:
+                runner.cleanup()
+
+    def test_measure_grab_plays_each_pose_and_logs_its_hold_window(self):
+        args = parse_args(["--backend", "mock", "--policy", "none", "--auto-confirm", "--measure", "grab",
+                           "--task-name", "static_balloon"])
+        with tempfile.TemporaryDirectory() as tmp, patch("gpt_astra.run.RUNTIME", Path(tmp)), \
+             patch("gpt_astra.run.GRAB_CHECK", ("2_10", "1_14")), patch("gpt_astra.run.GRAB_HOLD", .2), \
+             patch("gpt_astra.run.START_SETTLE", .5), \
+             redirect_stdout(io.StringIO()):
+            runner = Runner(args)
+            try:
+                runner.run()
+                events = [json.loads(line) for line in (runner.directory / "events.jsonl").read_text().splitlines()]
+                holds = [e for e in events if e["event"] == "grab_hold"]
+                self.assertEqual([h["grab"] for h in holds], ["2_10", "1_14"])
+                self.assertTrue(all(h["end"] - h["start"] >= .2 for h in holds))
+                played = [e["argument"] for e in events if e["event"] == "command_ack" and e["command"] == "motion"]
+                self.assertEqual(played, [runner.indexes[n] for n in ("grab_2_10", "release_2_10", "grab_1_14",
+                                                                      "release_1_14")])
+            finally:
+                runner.cleanup()
+
+    def test_measure_walk_logs_probes_against_the_balloon_on_its_stand(self):
+        args = parse_args(["--backend", "mock", "--policy", "none", "--auto-confirm", "--measure", "walk",
+                           "--task-name", "static_balloon"])
+        robot = {"x": 0., "y": 0., "last": None}
+        def command(session, name, argument=0):
+            if name == "move":       # mock physics: the robot moves at the commanded speed while moves arrive
+                now = time.monotonic()
+                dt = min(now - robot["last"], .1) if robot["last"] else 0.
+                speed = .2 if argument >= 4 else .4
+                robot["x"] += (1, -1, 0, 0)[argument % 4] * speed * dt
+                robot["y"] += (0, 0, 1, -1)[argument % 4] * speed * dt
+                robot["last"] = now
+            else:
+                robot["last"] = None
+            return Session.command(session, name, argument)
+        def locate(jpeg, cal=None, held=False):
+            return np.array([.7 - robot["x"], -robot["y"], .16])
+        with tempfile.TemporaryDirectory() as tmp, patch("gpt_astra.run.RUNTIME", Path(tmp)), \
+             patch("gpt_astra.run.locate", locate), patch.object(MockSession, "command", autospec=True,
+                                                                 side_effect=command), \
+             patch("gpt_astra.run.WALK_PROBES", (("forward", 0, .5), ("back_fine", 5, .5))), \
+             patch("gpt_astra.run.WALK_REPEATS", 1), patch("gpt_astra.run.WALK_SETTLE", .2), \
+             patch("gpt_astra.run.STEADY", .2), patch("gpt_astra.run.START_SETTLE", .5), redirect_stdout(io.StringIO()):
+            runner = Runner(args)
+            try:
+                runner.run()
+                events = [json.loads(line) for line in (runner.directory / "events.jsonl").read_text().splitlines()]
+                probes = {e["move"]: e for e in events if e["event"] == "walk_probe"}
+                self.assertEqual(sorted(probes), ["back_fine", "forward"])
+                forward, back = probes["forward"], probes["back_fine"]
+                self.assertAlmostEqual(forward["before"][0] - forward["after"][0], .2, delta=.05)  # 0.5 s at 0.4
+                self.assertAlmostEqual(back["after"][0] - back["before"][0], .1, delta=.05)        # 0.5 s at 0.2
+                self.assertIn("settle_probe", [e["event"] for e in events])
+            finally:
+                runner.cleanup()
 
     def test_mock_latches_when_lease_stops_and_never_rearms(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -1,0 +1,22 @@
+[
+  {
+    "index": 0,
+    "name": "ready",
+    "frames": 50
+  },
+  {
+    "index": 1,
+    "name": "reach_both",
+    "frames": 183
+  },
+  {
+    "index": 2,
+    "name": "reach_left",
+    "frames": 183
+  },
+  {
+    "index": 3,
+    "name": "reach_right",
+    "frames": 183
+  }
+]

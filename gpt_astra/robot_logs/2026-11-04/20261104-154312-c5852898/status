@@ -1,0 +1,4 @@
+14 2 3 182 0 0 1 0
+ok
+UI stop / heartbeat lost (>300 ms)
+Joint error 0.151859 rad / 0.30; speed 0.0257124 rad/s / 0.30; settled 0 s / 2.0

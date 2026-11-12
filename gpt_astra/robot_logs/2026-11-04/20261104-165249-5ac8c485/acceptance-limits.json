@@ -1,0 +1,7 @@
+{
+  "reference_speed": 4.0,
+  "velocity_mismatch": 1.0,
+  "root_displacement": 0.15,
+  "root_tilt": 0.2,
+  "hand_clearance": 0.025
+}

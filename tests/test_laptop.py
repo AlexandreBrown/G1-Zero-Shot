@@ -103,12 +103,12 @@ int main(int argc,char**argv) {
  assert(g.validate(c,s,.01,.01));
  g.waiting.store(true);assert(g.validate(c,s,.01,.01));assert(!g.setup_ready.load());
  g.settled_since=sonic_guard::now()-2.1;assert(g.validate(c,s,.01,.01));assert(g.setup_ready.load());
- s.motors[0].value+=.13;assert(g.validate(c,s,.01,.01));assert(!g.setup_ready.load());s.motors[0].value=g.init[0];
+ s.motors[0].value+=.31;assert(g.validate(c,s,.01,.01));assert(!g.setup_ready.load());s.motors[0].value=g.init[0];
  c.q_target[0]=std::numeric_limits<double>::quiet_NaN();assert(!g.validate(c,s,.01,.01));
  c.q_target=g.init;assert(!g.validate(c,s,.01,.01)); // latch cannot recover
  lease();sonic_guard::Guard stale;assert(!stale.validate(c,s,.11,.01));
  lease();sonic_guard::Guard jump;assert(jump.validate(c,s,.01,.01));c.q_target[0]+=.3;
- assert(!jump.validate(c,s,.01,.01));c.q_target=g.init;
+ assert(jump.validate(c,s,.01,.01));c.q_target=g.init; // step and speed limits removed (2026-11-04)
  {std::ofstream f(std::string(argv[1])+"/lease");f<<"0 1\n";}
  sonic_guard::Guard expired;assert(!expired.validate(c,s,.01,.01));
  lease();sonic_guard::Guard stalled;stalled.input_tick.store(sonic_guard::now()-.2);assert(!stalled.validate(c,s,.01,.01));

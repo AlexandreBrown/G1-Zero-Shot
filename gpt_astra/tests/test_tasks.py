@@ -1,3 +1,4 @@
+import json
 """Task snapshots, simulated standing handoff, and target geometry."""
 from pathlib import Path
 import tempfile
@@ -113,6 +114,159 @@ class BalloonSimulationTests(unittest.TestCase):
             self.assertAlmostEqual(modes[0], 0)
             self.assertLess(modes[1], 0)
             self.assertIn('"event": "ground"', (run / "task_events.jsonl").read_text())
+
+    def test_paused_world_freezes_balloon_and_task_clock(self):
+        try:
+            import mujoco
+        except ImportError:
+            self.skipTest("Optional test requires MuJoCo")
+        if not SCENE.is_file():
+            self.skipTest("Upstream MuJoCo scene not installed")
+        with tempfile.TemporaryDirectory() as directory:
+            run = Path(directory)
+            model = mujoco.MjModel.from_xml_path(str(prepare_scene(SCENE, run)))
+            data = mujoco.MjData(model)
+            data.qpos[:7] = [0, 0, .793, 1, 0, 0, 0]
+            mujoco.mj_forward(model, data)
+            task = TaskSimulation(model, data, run / "task-start")
+            (run / "task-start").write_text("start\n")
+            task.step()
+            robot_q = data.qpos[:task.q].copy()
+            def advance(steps):
+                for _ in range(steps):
+                    task.step()
+                    mujoco.mj_step(model, data)
+                    data.qpos[:task.q] = robot_q
+                    data.qvel[:task.v] = 0
+            advance(int(.2 / model.opt.timestep))
+            self.assertTrue(task.active)
+            advance(20)
+            falling = data.qvel[task.v+2]
+            self.assertLess(falling, 0)
+            height = float(data.qpos[task.q+2])
+            (run / "world-paused").write_text("paused\n")
+            advance(400)
+            self.assertTrue((run / "world-paused.ack").exists())
+            self.assertAlmostEqual(float(data.qpos[task.q+2]), height, places=9)
+            (run / "world-paused").unlink()
+            task.step()
+            self.assertFalse((run / "world-paused.ack").exists())
+            self.assertAlmostEqual(data.qvel[task.v+2], falling)
+            self.assertTrue(np.allclose(data.xfrc_applied[task.body], 0))
+            advance(20)
+            self.assertLess(data.qpos[task.q+2], height - .01)
+
+    def test_paused_world_stops_task_clock_before_spawn(self):
+        try:
+            import mujoco
+        except ImportError:
+            self.skipTest("Optional test requires MuJoCo")
+        if not SCENE.is_file():
+            self.skipTest("Upstream MuJoCo scene not installed")
+        with tempfile.TemporaryDirectory() as directory:
+            run = Path(directory)
+            model = mujoco.MjModel.from_xml_path(str(prepare_scene(SCENE, run)))
+            data = mujoco.MjData(model)
+            data.qpos[:7] = [0, 0, .793, 1, 0, 0, 0]
+            mujoco.mj_forward(model, data)
+            task = TaskSimulation(model, data, run / "task-start")
+            (run / "task-start").write_text("start\n")
+            task.step()
+            robot_q = data.qpos[:task.q].copy()
+            def advance(steps):
+                for _ in range(steps):
+                    task.step()
+                    mujoco.mj_step(model, data)
+                    data.qpos[:task.q] = robot_q
+                    data.qvel[:task.v] = 0
+            advance(3)
+            (run / "world-paused").write_text("paused\n")
+            advance(200)
+            self.assertFalse(task.active)
+            (run / "world-paused").unlink()
+            while not task.active:
+                advance(1)
+            spawn = json.loads((run / "task_events.jsonl").read_text().splitlines()[0])
+            self.assertEqual(spawn["event"], "spawn")
+            self.assertLess(spawn["sim_elapsed_s"], .1)
+            self.assertGreater(data.time - task.started_at, 200 * model.opt.timestep)
+
+    def test_sink_mode_falls_at_balloon_terminal_speed(self):
+        try:
+            import mujoco
+        except ImportError:
+            self.skipTest("Optional test requires MuJoCo")
+        if not SCENE.is_file():
+            self.skipTest("Upstream MuJoCo scene not installed")
+        import gpt_astra.tasks.catch_balloon.sim as balloon
+        with tempfile.TemporaryDirectory() as directory, patch.object(balloon, "SINK", True):
+            run = Path(directory)
+            model = mujoco.MjModel.from_xml_path(str(prepare_scene(SCENE, run)))
+            data = mujoco.MjData(model)
+            data.qpos[:7] = [0, 0, .793, 1, 0, 0, 0]
+            mujoco.mj_forward(model, data)
+            task = TaskSimulation(model, data, run / "task-start")
+            (run / "task-start").write_text("start\n")
+            robot_q = data.qpos[:task.q].copy()
+            for _ in range(int(1.5 / model.opt.timestep)):
+                task.step()
+                mujoco.mj_step(model, data)
+                data.qpos[:task.q] = robot_q
+                data.qvel[:task.v] = 0
+            self.assertTrue(task.active)
+            self.assertAlmostEqual(float(data.qvel[task.v+2]), -balloon.SINK_SPEED, delta=.02)
+
+    def test_held_mode_keeps_fixed_height_and_moves_on_after_touch(self):
+        try:
+            import mujoco
+        except ImportError:
+            self.skipTest("Optional test requires MuJoCo")
+        if not SCENE.is_file():
+            self.skipTest("Upstream MuJoCo scene not installed")
+        import gpt_astra.tasks.catch_balloon.sim as balloon
+        points = tuple((x, y, balloon.HELD_Z) for x, y in balloon.HELD_POINTS)
+        with tempfile.TemporaryDirectory() as directory, patch.multiple(
+                balloon, HELD=True, HOVER=True, HOVER_POINTS=points, HOVER_SECONDS=12.0,
+                HOVER_STIFFNESS=40.0, HOVER_DAMPING=2.5):
+            run = Path(directory)
+            model = mujoco.MjModel.from_xml_path(str(prepare_scene(SCENE, run)))
+            data = mujoco.MjData(model)
+            robot = load_model(UPSTREAM)
+            for name, value in zip(robot["names"], ready_pose(robot)):
+                data.qpos[model.jnt_qposadr[model.joint(name).id]] = value
+            data.qpos[:7] = [0, 0, .793, 1, 0, 0, 0]
+            mujoco.mj_forward(model, data)
+            task = TaskSimulation(model, data, run / "task-start")
+            (run / "task-start").write_text("start\n")
+            task.step()
+            robot_q = data.qpos[:task.q].copy()
+            def advance(seconds):
+                for _ in range(int(seconds / model.opt.timestep)):
+                    task.step()
+                    mujoco.mj_step(model, data)
+                    data.qpos[:task.q] = robot_q
+                    data.qvel[:task.v] = 0
+            pelvis = data.body("pelvis").xpos.copy()
+            advance(1.5)
+            self.assertTrue(task.active)
+            self.assertTrue(np.allclose(data.qpos[task.q:task.q+3] - pelvis, points[0], atol=.005))
+            task.touched, task.touched_at = True, task.spawned_at + .1
+            (run / "status").write_text("5 2 1 40 1 0 0 0\nok\n")
+            advance(3.0)
+            self.assertFalse(task.active)
+            (run / "status").write_text("6 2 0 0 0 0 0 0\nok\n")
+            while not task.active:
+                advance(.1)
+            advance(1.0)
+            self.assertTrue(np.allclose(data.qpos[task.q:task.q+3] - pelvis, points[1], atol=.005))
+            events = [json.loads(line) for line in (run / "task_events.jsonl").read_text().splitlines()]
+            self.assertEqual([e["event"] for e in events], ["spawn", "held_next", "spawn"])
+            self.assertEqual([e["offset"] for e in events if e["event"] == "spawn"],
+                             [list(points[0]), list(points[1])])
+        with patch.multiple(balloon, HELD=True, HOVER=True, HOVER_POINTS=points, HELD_SEED="1"):
+            seeded = TaskSimulation(model, data, run / "task-start").points
+            self.assertEqual(sorted(seeded), sorted(points))
+            self.assertNotEqual(seeded, list(points))
 
     def test_detected_two_hand_catch_resets_after_five_seconds(self):
         try:

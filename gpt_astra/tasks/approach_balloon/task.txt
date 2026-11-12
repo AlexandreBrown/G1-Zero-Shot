@@ -1,0 +1,8 @@
+A person holds a red balloon still in front of the robot. In simulation, a red sphere
+at hand height represents the balloon. Walk up to it with the walk primitives until it
+is within arm's reach, then touch it with a reach. Within reach, the balloon looks large
+and sits just above the robot's hands near the bottom of the ego view; a reach touches
+a target about 0.45 m in front of the pelvis, reach_left on the robot's left, reach_right
+on its right and reach_both in between. Hold when unsure or when the balloon is not
+visible. The camera cannot see behind the robot; never assume that unseen space is clear.
+The reaches do not close fingers or provide a guaranteed grasp.

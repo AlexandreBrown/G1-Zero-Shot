@@ -2,6 +2,7 @@
 import csv
 import json
 import math
+import os
 from pathlib import Path
 import time
 
@@ -16,7 +17,9 @@ class SimulationRecorder:
         self.start = time.monotonic()
         self.started_at_unix = time.time()
         self.next_sample = self.next_video = self.next_flush = 0.0
-        self.video_fps, self.sample_hz = 15, 50
+        # GPT_ASTRA_VIDEO_FPS (astra_ws): the video costs about as much as the physics per sim second and each frame
+        # pauses the loop that publishes the robot state; 0 records only the trajectory (render it afterwards).
+        self.video_fps, self.sample_hz = int(os.environ.get("GPT_ASTRA_VIDEO_FPS", 15)), 50
         self.video_origin = None
         self.video_frames = 0
         self.previous_frame = None
@@ -31,7 +34,11 @@ class SimulationRecorder:
                                      "qpos_address": int(model.jnt_qposadr[i]),
                                      "qvel_address": int(model.jnt_dofadr[i])} for i in range(model.njnt)]}
         self.save_metadata()
-        self.video = cv2.VideoWriter(str(self.directory / "simulation.mp4"),
+        if not self.video_fps:
+            return
+        # Hidden while incomplete: players retrying a moov-less mp4 have hung the desktop.
+        self.partial_video = self.directory / ".simulation.incomplete.mp4"
+        self.video = cv2.VideoWriter(str(self.partial_video),
                                      cv2.VideoWriter_fourcc(*"mp4v"), self.video_fps, (640, 480))
         if not self.video.isOpened():
             self.stream.close()
@@ -54,7 +61,7 @@ class SimulationRecorder:
                 raise RuntimeError("Non-finite simulation state; trajectory recording stopped")
             self.csv.writerow([format(float(value), ".9g") for value in values])
             self.next_sample = elapsed + 1 / self.sample_hz
-        if elapsed >= self.next_video:
+        if self.video_fps and elapsed >= self.next_video:
             self.camera.lookat[:] = self.data.body("pelvis").xpos
             self.renderer.update_scene(self.data, camera=self.camera)
             frame = self.cv2.cvtColor(self.renderer.render(), self.cv2.COLOR_RGB2BGR)
@@ -77,8 +84,10 @@ class SimulationRecorder:
         (self.directory / "trajectory_meta.json").write_text(json.dumps(self.metadata, indent=2) + "\n")
 
     def close(self):
-        self.video.release()
-        self.renderer.close()
+        if self.video_fps:
+            self.video.release()
+            self.partial_video.replace(self.directory / "simulation.mp4")
+            self.renderer.close()
         self.stream.close()
         self.metadata.update(video_start_elapsed_s=self.video_origin, video_frames=self.video_frames)
         self.save_metadata()

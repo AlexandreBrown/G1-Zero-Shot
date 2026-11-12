@@ -41,7 +41,9 @@ class Frames:
 
 
 class ZmqCamera(Frames):
-    def __init__(self, host, port=5555, key="ego_view"):
+    """swap_red_blue: the sender encoded an RGB image as if it were BGR (the robot's composed_camera server does,
+    through OpenCV), so red arrives blue; swap the channels back before anyone sees the frame."""
+    def __init__(self, host, port=5555, key="ego_view", swap_red_blue=False):
         super().__init__()
         import zmq
         self.zmq = zmq
@@ -52,7 +54,7 @@ class ZmqCamera(Frames):
         self.socket.setsockopt(zmq.LINGER, 0)
         self.socket.setsockopt(zmq.MAXMSGSIZE, 16 * 1024 * 1024)
         self.socket.connect(f"tcp://{host}:{port}")
-        self.key, self.last_stamp = key, -math.inf
+        self.key, self.last_stamp, self.swap_red_blue = key, -math.inf, swap_red_blue
 
     def poll(self, state=None):
         import msgpack
@@ -81,6 +83,8 @@ class ZmqCamera(Frames):
         with Image.open(io.BytesIO(value)) as image:
             if image.width * image.height > 16_000_000:
                 raise ValueError("Camera image too large")
+            if self.swap_red_blue:
+                image = Image.merge("RGB", image.convert("RGB").split()[::-1])
             jpeg = jpeg_thumbnail(image)
         self.last_stamp = stamp
         self.add(Frame(jpeg, time.monotonic(), self.key))

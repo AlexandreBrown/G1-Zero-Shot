@@ -1,0 +1,99 @@
+{
+  "platform": "robot",
+  "note": "First follow trial on the robot: robot.json's unmeasured defaults, plus a detector height window that reaches the floor (a balloon lying on the floor is followed). Not a calibration; measure robot.json with ROBOT_FOLLOW_CHECKLIST.md for real use.",
+  "camera": {
+    "measured": "NOT MEASURED: robot.json defaults (from sim), dated so a first follow trial can run (Elham, 2026-11-04)",
+    "how": "python -m gpt_astra.tools.check_camera --write gpt_astra/calibration/robot.json (balloon at taped spots, robot standing still or in the gantry)",
+    "position_m": [
+      0.056,
+      0.0,
+      0.504
+    ],
+    "rotation": [
+      [
+        0.0006,
+        0.6967,
+        -0.7174
+      ],
+      [
+        -1.0,
+        0.0008,
+        0.0
+      ],
+      [
+        0.0006,
+        0.7174,
+        0.6967
+      ]
+    ],
+    "rotation_note": "columns: camera x (image right), y (image up), z (backwards) in the pelvis frame",
+    "fovy_deg": 45.0
+  },
+  "balloon": {
+    "measured": "NOT MEASURED: robot.json defaults (from sim), dated so a first follow trial can run (Elham, 2026-11-04)",
+    "how": "same check_camera session: the balloon's real diameter, red thresholds under the lab lights, no detections without the balloon or on red clothing",
+    "radius_m": 0.075,
+    "red_min": 80,
+    "red_ratio": 2.0,
+    "min_pixels": 40,
+    "height_range_m": [
+      -0.8,
+      0.4
+    ],
+    "max_fit_residual": 0.45,
+    "trial_note": "0.45 instead of 0.08 (2026-11-04): the balloon's cord in front of it split the red disk; 0.08 kept 68 of 781 balloon frames of the first follow run, 0.45 keeps 771. A red rectangle fits at ~0.11, so red clothing near the robot now counts as a balloon.",
+    "still_tolerance_m": 10.0
+  },
+  "grab": {
+    "measured": "NOT MEASURED: robot.json defaults (from sim), dated so a first follow trial can run (Elham, 2026-11-04)",
+    "how": "run.py --grab-check in the gantry with tools/record_lowstate.py, then tools/grab_report.py --write",
+    "meeting_x_m": [
+      0.42,
+      0.45,
+      0.47
+    ],
+    "yaw_tracking": 0.9,
+    "settle_back_m": 0.06,
+    "meet_tolerance_m": [
+      0.045,
+      0.02
+    ],
+    "zone_tolerance_m": [
+      0.04,
+      0.12
+    ]
+  },
+  "walk": {
+    "measured": "NOT MEASURED: robot.json defaults (from sim), dated so a first follow trial can run (Elham, 2026-11-04)",
+    "how": "run.py --walk-check on the floor (gantry slack) with a balloon on a stand, then tools/walk_report.py --write; the speeds must equal the robot build's WALK_SPEED/FINE_WALK_SPEED",
+    "walk_speed_mps": 0.4,
+    "fine_walk_speed_mps": 0.2,
+    "coast_m": {
+      "forward": 0.25,
+      "back": 0.1,
+      "left": 0.06,
+      "right": 0.06,
+      "forward_fine": 0.08,
+      "back_fine": 0.02,
+      "left_fine": 0.06,
+      "right_fine": 0.06
+    },
+    "fine_within_m": 0.0,
+    "settle_s": [
+      1.0,
+      0.6
+    ],
+    "stall_s": 2.5,
+    "kick_s": 0.4,
+    "min_step_m": 0.05,
+    "follow_x_m": 0.55,
+    "follow_tolerance_m": 0.1
+  },
+  "safety": {
+    "note": "Trial limits (2026-11-04, after the first follow run): the 1 m fence stopped all walking after three short sidesteps (dead reckoning at commanded speed over-reads), and 0.3 s cut every walk while the far balloon flickered in view. fence 5 m (~1.5 m real), keep walking 1 s toward the last sighting.",
+    "lost_walk_s": 1.0,
+    "max_walk_s": 4.0,
+    "fence_m": 100.0
+  },
+  "trial_changes": "2026-11-04 after the second follow run: fence 100 m (off; dead reckoning counted slow steps taken in place as 3.6 m), fine_within 0 (the 0.2 m/s steps stepped in place, so walk only at 0.4 m/s), still_tolerance 0.08 m (the corded balloon's estimate jitters ~4 cm per frame). still_tolerance 10 m (stillness check off for now, Elham: fix the still count later): the robot only has to stand 0.6 s with the balloon in view, so it closes in and grabs even while the balloon moves."
+}

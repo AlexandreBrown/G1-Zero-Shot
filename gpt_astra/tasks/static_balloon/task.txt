@@ -1,0 +1,3 @@
+Measurement task: a red balloon fixed on a stand about 0.9 m in front of the robot, 0.15 m below pelvis height. run.py --measure grab plays the
+follow_balloon grab poses (no balloon contact needed) and --measure walk walks short, scripted steps toward and away
+from the balloon to measure how the walk moves; no policy decisions are used (--policy none). Answer hold.
